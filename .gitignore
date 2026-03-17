@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
+
+# Never commit credentials
+clawscummer_accounts.json
+*.credentials.json
+*.signal
+clawscummer_launch.json
