@@ -755,10 +755,128 @@ class ClawsCummerApp(App):
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
+def _request_uac():
+    """Re-launch this process elevated via Windows UAC."""
+    try:
+        import ctypes
+        params = " ".join(f'"{a}"' for a in sys.argv)
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
+    except Exception:
+        pass
+    sys.exit(0)
+
+
+def _is_admin() -> bool:
+    try:
+        import ctypes
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return True  # Non-Windows or can't check: assume OK
+
+
+def _launch_claude_loop():
+    """Read launch file, cd to project dir, run claude with auto-switch on rate limit."""
+    if not LAUNCH_FILE.exists():
+        return
+    try:
+        launch = json.loads(LAUNCH_FILE.read_text(encoding="utf-8"))
+        LAUNCH_FILE.unlink(missing_ok=True)
+    except Exception:
+        return
+
+    if launch.get("action") == "quit":
+        return
+
+    is_resume    = launch.get("action") == "resume"
+    project_path = launch.get("project_path", "")
+    original_dir = os.getcwd()
+
+    if is_resume and project_path and os.path.isdir(project_path):
+        os.chdir(project_path)
+
+    am = AccountManager()
+
+    for attempt in range(10):
+        acc   = am.get_active_account()
+        label = acc.label if acc else "Unknown"
+
+        print(f"\n  +------------------------------------------+")
+        print(f"  |  ClawsCummer  --  {label:<22} |")
+        print(f"  +------------------------------------------+\n")
+
+        claude_cmd = ["claude"]
+        if is_resume or attempt > 0:
+            claude_cmd.append("--continue")
+
+        proc = subprocess.Popen(claude_cmd)
+
+        # Background thread: watch .jsonl files for rate-limit strings
+        rate_limit_hit = threading.Event()
+        watch_start    = time.time()
+        _sizes: dict[str, int] = {}
+
+        def _watch():
+            if not PROJECTS_DIR.exists():
+                return
+            while not rate_limit_hit.is_set():
+                try:
+                    for proj in PROJECTS_DIR.iterdir():
+                        if not proj.is_dir():
+                            continue
+                        for f in proj.glob("*.jsonl"):
+                            try:
+                                if f.stat().st_mtime < watch_start - 5:
+                                    continue
+                                key  = str(f)
+                                size = f.stat().st_size
+                                prev = _sizes.get(key, 0)
+                                if size > prev:
+                                    with open(f, "r", encoding="utf-8", errors="replace") as fh:
+                                        fh.seek(prev)
+                                        new_text = fh.read().lower()
+                                    _sizes[key] = size
+                                    for pat in RATE_LIMIT_PATTERNS:
+                                        if re.search(pat, new_text):
+                                            rate_limit_hit.set()
+                                            return
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                rate_limit_hit.wait(2)
+
+        threading.Thread(target=_watch, daemon=True, name="RateLimitWatch").start()
+
+        # Wait for claude to finish or rate limit to fire
+        while proc.poll() is None:
+            if rate_limit_hit.is_set():
+                proc.terminate()
+                try:   proc.wait(timeout=5)
+                except Exception: proc.kill()
+                break
+            time.sleep(0.5)
+
+        if rate_limit_hit.is_set():
+            print("\n  [ClawsCummer] Rate limit detected -- switching account...\n")
+            nxt = am.rotate_to_next()
+            if nxt:
+                print(f"  [ClawsCummer] Switched to: {nxt.label}\n")
+            else:
+                print("  [ClawsCummer] No other accounts. Add more via the TUI.\n")
+                break
+            is_resume = True
+            time.sleep(1)
+            continue
+
+        break  # Normal exit
+
+    os.chdir(original_dir)
+
+
 def main():
     parser = argparse.ArgumentParser(description="ClawsCummer")
     parser.add_argument("--watch", type=int, metavar="PID",
-                        help="Run as rate-limit watcher for given claude PID")
+                        help="Run as rate-limit watcher (internal use)")
     parser.add_argument("--switch-auto", action="store_true",
                         help="Rotate to next account non-interactively")
     args = parser.parse_args()
@@ -770,13 +888,20 @@ def main():
     if args.switch_auto:
         am = AccountManager()
         nxt = am.rotate_to_next()
-        if nxt:
-            print(f"[ClawsCummer] Switched to: {nxt.label}")
-        else:
-            print("[ClawsCummer] Only one account configured.")
+        print(f"[ClawsCummer] Switched to: {nxt.label}" if nxt
+              else "[ClawsCummer] Only one account configured.")
         return
 
+    # UAC elevation (Windows only)
+    if sys.platform == "win32" and not _is_admin():
+        _request_uac()
+        return
+
+    # Run the TUI
     ClawsCummerApp().run()
+
+    # After TUI exits, run the selected session
+    _launch_claude_loop()
 
 
 if __name__ == "__main__":
