@@ -470,6 +470,7 @@ class LoginScreen(Screen):
                 yield ListItem(Label("  + Add New Account"), id="li-add")
             yield Rule()
             yield Label("  [↑↓] Navigate   [Enter] Select   [A] Add   [Q] Quit", id="login-hint")
+        yield Footer()
 
     @staticmethod
     def _age(iso: str) -> str:
@@ -530,7 +531,7 @@ class MainScreen(Screen):
         with Horizontal(id="layout"):
             # ── Left Sidebar ──────────────────────────────────────────────
             with Vertical(id="sidebar"):
-                yield Label("  CONVERSATIONS", id="sidebar-header")
+                yield Label("  SESSIONS", id="sidebar-header")
                 yield Rule()
                 with ScrollableContainer(id="sidebar-scroll"):
                     yield ListView(id="hist-list")
@@ -539,48 +540,54 @@ class MainScreen(Screen):
 
             # ── Main Panel ────────────────────────────────────────────────
             with Vertical(id="main-panel"):
+                # Top nav bar
                 with Horizontal(id="topbar"):
-                    yield Label("CLAWSCUMMER", id="topbar-logo")
-                    yield Label(f"● {acc_label}", id="acc-label")
-                yield Rule()
+                    yield Label("◈  CLAWSCUMMER", id="topbar-logo")
+                    yield Label(f"● {acc_label}", id="acc-badge")
 
-                yield Label("  ─── RECENT / IN PROGRESS ───", id="wip-header")
-                with Container(id="wip-zone"):
-                    if self._wips:
-                        for i, c in enumerate(self._wips, 1):
-                            yield Static(self._card_text(c, i), classes="wip-card", id=f"wip{i}")
-                    else:
-                        yield Label("  No conversations found.", id="no-wip")
+                # Scrollable content
+                with ScrollableContainer(id="content-area"):
+                    yield Label("CONTINUE WHERE YOU LEFT OFF", id="wip-header")
+                    with Container(id="wip-zone"):
+                        if self._wips:
+                            for i, c in enumerate(self._wips, 1):
+                                yield Static(self._card_text(c, i), classes="wip-card", id=f"wip{i}")
+                        else:
+                            yield Label("  No recent conversations found.", id="no-wip")
 
-                yield Rule()
-                yield Label("  ─── START SOMETHING NEW ───", id="new-header")
-                yield Input(
-                    placeholder="  What do you want to work on?  [Enter] to launch",
-                    id="prompt-input"
-                )
-                yield Label(
-                    "  [1][2][3] Quick resume   [N] New   [Ctrl+Shift+S] Switch account   [Q] Quit",
-                    id="main-hint"
-                )
+                    yield Label("START SOMETHING NEW", id="new-header")
+                    yield Input(
+                        placeholder="What do you want to work on?   press Enter to launch claude",
+                        id="prompt-input"
+                    )
+                    yield Label(
+                        "  1 · 2 · 3  resume   n  new   ctrl+shift+s  switch account   q  quit",
+                        id="main-hint"
+                    )
 
         self._fill_sidebar()
+        yield Footer()
 
     def _card_text(self, c: Conversation, n: int) -> str:
         now  = datetime.now(timezone.utc)
         diff = now - c.last_timestamp
         if diff.days == 0:
-            age = f"today  ({diff.seconds // 3600}h ago)"
+            h   = diff.seconds // 3600
+            age = f"{h}h ago" if h else "just now"
         elif diff.days == 1:
             age = "yesterday"
         else:
-            age = f"{diff.days} days ago"
-        topic = (c.topic[:72] + "…") if len(c.topic) > 72 else c.topic
+            age = f"{diff.days}d ago"
+
+        topic = (c.topic[:74] + "…") if len(c.topic) > 74 else c.topic
         proj  = c.project_key
-        wip   = " [WIP]" if c.is_wip else ""
+        wip   = "  [bold #34d399]● WIP[/]" if c.is_wip else ""
+
         return (
-            f" [{n}]  {topic}{wip}\n"
-            f"       {proj}  •  {age}  •  {c.message_count} messages\n"
-            f"       Press [{n}] to resume"
+            f" [bold #818cf8] {n} [/]  [bold #e2e8f4]{topic}[/]{wip}\n"
+            f"     [#52525b]{proj}[/]  [#3f3f56]·[/]  [#52525b]{age}[/]"
+            f"  [#3f3f56]·[/]  [#52525b]{c.message_count} msgs[/]\n"
+            f"     [#3f3f56]press [{n}] to resume[/]"
         )
 
     def _fill_sidebar(self):
@@ -646,7 +653,7 @@ class MainScreen(Screen):
             if not acc:
                 return
             self.am.switch_to(acc)
-            self.query_one("#acc-label", Label).update(f"● {acc.label}")
+            self.query_one("#acc-badge", Label).update(f"● {acc.label}")
 
         self.app.push_screen(AccountSwitchModal(accounts, active_id), callback=on_selected)
 
@@ -664,82 +671,198 @@ class ClawsCummerApp(App):
     BINDINGS = [Binding("ctrl+shift+s", "app_switch", "Switch Account")]
 
     CSS = """
-    Screen { background: #0d1117; color: #e6edf3; }
+    /* ═══════════════════════════════════════════════
+       ClawsCummer  –  Modern Dark UI
+       Palette: zinc-950 base · indigo accent · green success
+       ═══════════════════════════════════════════════ */
 
-    /* ── Login ── */
-    #login-wrap { align: center middle; padding: 1 2; }
-    #logo       { color: #00d4aa; text-align: center; }
-    #tagline    { color: #00d4aa; text-align: center; text-style: italic; }
-    #login-sub  { color: #8b949e; padding: 0 0 0 2; }
-    #login-list {
-        background: #161b22; border: solid #30363d;
-        height: auto; max-height: 16; width: 64; margin: 1 0;
+    Screen { background: #0c0c11; color: #e2e8f4; }
+
+    /* ── LOGIN ──────────────────────────────────────── */
+    #login-wrap {
+        align: center middle;
+        padding: 1 4;
     }
-    #login-list > ListItem          { padding: 0 1; color: #e6edf3; }
-    #login-list > ListItem:hover    { background: #1f2937; color: #00d4aa; }
-    #login-list > ListItem.-highlighted { background: #1f2937; color: #00d4aa; }
-    #login-hint { color: #8b949e; text-align: center; padding: 1 0 0 0; }
+    #logo {
+        color: #818cf8;
+        text-align: center;
+        padding: 1 0 0 0;
+    }
+    #tagline {
+        color: #6366f1;
+        text-align: center;
+        text-style: italic bold;
+        padding: 0 0 1 0;
+    }
+    #login-sub {
+        color: #52525b;
+        text-align: center;
+        padding: 0 0 1 0;
+    }
+    #login-list {
+        background: #111119;
+        border: round #27273a;
+        height: auto;
+        max-height: 20;
+        width: 58;
+        margin: 0 0 1 0;
+    }
+    #login-list > ListItem {
+        padding: 1 2;
+        color: #a1a1aa;
+        background: #111119;
+    }
+    #login-list > ListItem:hover {
+        background: #18182a;
+        color: #c4b5fd;
+    }
+    #login-list > ListItem.-highlighted {
+        background: #1e1e35;
+        color: #a5b4fc;
+    }
+    #login-hint { color: #3f3f56; text-align: center; padding: 1 0; }
 
-    /* ── Add Account ── */
-    #add-wrap   { align: center middle; padding: 2; }
-    #add-title  { color: #00d4aa; text-style: bold; text-align: center; padding: 0 0 1 0; }
-    #add-instr  { color: #e6edf3; padding: 1 0; }
-    #add-input  { background: #161b22; border: solid #30363d; width: 60; margin: 1 0; }
-    #add-input:focus { border: solid #00d4aa; }
-    #add-status { color: #3fb950; }
-    #add-hint   { color: #8b949e; text-align: center; }
+    /* ── ADD ACCOUNT ────────────────────────────────── */
+    #add-wrap  { align: center middle; padding: 2 4; }
+    #add-title {
+        color: #818cf8; text-style: bold;
+        text-align: center; padding: 0 0 1 0;
+    }
+    #add-instr  { color: #a1a1aa; padding: 1 0; width: 60; }
+    #add-input  {
+        background: #111119; border: round #27273a;
+        width: 60; margin: 1 0; color: #e2e8f4;
+    }
+    #add-input:focus  { border: round #6366f1; background: #14142a; }
+    #add-status { color: #34d399; padding: 0 0 1 0; }
+    #add-hint   { color: #3f3f56; text-align: center; }
 
-    /* ── Main Layout ── */
+    /* ── MAIN LAYOUT ────────────────────────────────── */
     #layout { height: 100%; }
 
-    /* Sidebar */
-    #sidebar       { width: 30; background: #161b22; border-right: solid #21262d; }
-    #sidebar-header{ color: #8b949e; text-style: bold; padding: 1 1 0 1; }
-    #sidebar-scroll { height: 1fr; }
-    #hist-list { background: #161b22; height: auto; }
-    #hist-list > ListItem { padding: 0 0; color: #8b949e; }
-    #hist-list > ListItem:hover       { background: #1f2937; color: #e6edf3; }
-    #hist-list > ListItem.-highlighted { background: #1f2937; color: #00d4aa; }
-    #hist-list > ListItem.disabled    { color: #484f58; }
+    /* Nav sidebar */
+    #sidebar {
+        width: 26;
+        background: #0a0a0f;
+        border-right: solid #18182a;
+    }
+    #sidebar-header {
+        color: #3f3f56;
+        text-style: bold;
+        padding: 1 2 0 2;
+    }
+    #sidebar-scroll { height: 1fr; background: #0a0a0f; }
+    #hist-list { background: #0a0a0f; height: auto; }
+    #hist-list > ListItem {
+        padding: 0 1; color: #52525b; background: #0a0a0f;
+    }
+    #hist-list > ListItem:hover {
+        background: #14142a; color: #c4b5fd;
+    }
+    #hist-list > ListItem.-highlighted {
+        background: #1a1a30; color: #818cf8;
+    }
     #switch-btn {
-        margin: 1; background: #21262d; color: #8b949e;
-        border: solid #30363d; width: 100%;
+        margin: 1 1 1 1;
+        background: #111119;
+        color: #52525b;
+        border: round #27273a;
+        width: 100%;
     }
-    #switch-btn:hover { background: #1f2937; border: solid #00d4aa; color: #00d4aa; }
+    #switch-btn:hover {
+        background: #1a1a2e; color: #a5b4fc; border: round #4f46e5;
+    }
 
-    /* Main panel */
-    #main-panel { padding: 1 2; height: 100%; }
-    #topbar     { height: 3; align: left middle; }
-    #topbar-logo{ color: #00d4aa; text-style: bold; width: 1fr; }
-    #acc-label  { color: #3fb950; }
+    /* Top nav bar */
+    #topbar {
+        background: #0a0a0f;
+        border-bottom: solid #18182a;
+        height: 3;
+        align: left middle;
+        padding: 0 2;
+    }
+    #topbar-logo {
+        color: #818cf8; text-style: bold; width: 1fr; padding: 0 1;
+    }
+    #acc-badge {
+        color: #34d399;
+        background: #0d1f17;
+        border: round #14532d;
+        padding: 0 2;
+    }
 
-    #wip-header  { color: #8b949e; text-style: bold; padding: 1 0 1 0; }
-    #new-header  { color: #8b949e; text-style: bold; padding: 1 0 0 0; }
-    #wip-zone    { height: auto; }
+    /* Scrollable content area */
+    #content-area { padding: 2 3; height: 1fr; overflow-y: auto; }
+
+    #wip-header {
+        color: #3f3f56; text-style: bold; padding: 0 0 1 0;
+    }
+    #new-header {
+        color: #3f3f56; text-style: bold; padding: 2 0 1 0;
+    }
+    #wip-zone { height: auto; margin: 0 0 1 0; }
+
     .wip-card {
-        background: #161b22; border: solid #30363d;
-        padding: 1; margin: 0 0 1 0; color: #e6edf3;
+        background: #111119;
+        border: round #27273a;
+        padding: 1 2;
+        margin: 0 0 1 0;
+        color: #e2e8f4;
     }
-    #no-wip { color: #8b949e; padding: 1; }
-    #prompt-input { background: #161b22; border: solid #30363d; margin: 1 0; }
-    #prompt-input:focus { border: solid #00d4aa; }
-    #main-hint { color: #484f58; }
+    .wip-card:hover {
+        background: #14142a;
+        border: round #4f46e5;
+    }
 
-    /* Rule */
-    Rule { color: #21262d; margin: 1 0; }
+    #no-wip { color: #3f3f56; padding: 2 0; }
 
-    /* ── Modal ── */
+    #prompt-input {
+        background: #111119;
+        border: round #27273a;
+        color: #e2e8f4;
+        padding: 0 1;
+        margin: 0 0 0 0;
+    }
+    #prompt-input:focus {
+        border: round #6366f1;
+        background: #14142a;
+    }
+    #main-hint { color: #27273a; padding: 0 0 1 0; }
+
+    /* Rules / dividers */
+    Rule { color: #18182a; margin: 1 0; }
+
+    /* ── MODAL ──────────────────────────────────────── */
     AccountSwitchModal { align: center middle; }
     #modal-box {
-        background: #161b22; border: solid #00d4aa;
-        padding: 2; width: 52; height: auto;
+        background: #111119;
+        border: round #4f46e5;
+        padding: 2 3;
+        width: 52; height: auto;
     }
-    #modal-title { color: #00d4aa; text-style: bold; text-align: center; padding: 0 0 1 0; }
-    #modal-list  { background: #161b22; height: auto; max-height: 14; border: solid #30363d; }
-    #modal-list > ListItem { padding: 0 1; color: #e6edf3; }
-    #modal-list > ListItem:hover       { background: #1f2937; color: #00d4aa; }
-    #modal-list > ListItem.-highlighted { background: #1f2937; color: #00d4aa; }
-    #modal-hint { color: #8b949e; text-align: center; padding: 1 0 0 0; }
+    #modal-title {
+        color: #818cf8; text-style: bold;
+        text-align: center; padding: 0 0 1 0;
+    }
+    #modal-list {
+        background: #111119;
+        height: auto; max-height: 16;
+        border: round #27273a;
+        margin: 1 0;
+    }
+    #modal-list > ListItem { padding: 1 2; color: #a1a1aa; }
+    #modal-list > ListItem:hover       { background: #18182a; color: #c4b5fd; }
+    #modal-list > ListItem.-highlighted{ background: #1e1e35; color: #818cf8; }
+    #modal-hint { color: #3f3f56; text-align: center; padding: 1 0 0 0; }
+
+    /* ── FOOTER ─────────────────────────────────────── */
+    Footer {
+        background: #0a0a0f;
+        color: #3f3f56;
+        border-top: solid #18182a;
+    }
+    Footer > .footer--key { color: #52525b; }
+    Footer > .footer--highlight { background: #18182a; color: #818cf8; }
     """
 
     def __init__(self, **kw):
