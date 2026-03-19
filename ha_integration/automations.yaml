@@ -1,0 +1,31 @@
+# ─── ClawsCummer Automation ────────────────────────────────────────────────
+# Add to automations.yaml or via HA UI
+
+- id: clawscummer_send_on_input
+  alias: "ClawsCummer: Send Prompt"
+  description: "When prompt input changes, send to ClawsCummer and update response"
+  trigger:
+    - platform: state
+      entity_id: input_text.clawscummer_prompt
+  condition:
+    - condition: template
+      value_template: "{{ trigger.to_state.state | length > 0 }}"
+    - condition: state
+      entity_id: input_boolean.clawscummer_processing
+      state: "off"
+  action:
+    - service: input_boolean.turn_on
+      entity_id: input_boolean.clawscummer_processing
+    - service: rest_command.clawscummer_send_prompt
+      data:
+        prompt: "{{ states('input_text.clawscummer_prompt') }}"
+    - delay: "00:00:02"
+    - service: homeassistant.update_entity
+      entity_id: sensor.clawscummer_last_response
+    - service: input_boolean.turn_off
+      entity_id: input_boolean.clawscummer_processing
+    - service: persistent_notification.create
+      data:
+        title: "ClawsCummer Response"
+        message: "{{ state_attr('sensor.clawscummer_last_response', 'text') }}"
+  mode: single

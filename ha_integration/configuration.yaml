@@ -1,0 +1,51 @@
+# ─── ClawsCummer HA Integration ────────────────────────────────────────────
+# Add these sections to your HA configuration.yaml
+# Replace CLAWSCUMMER_IP with your PC's Tailscale IP (e.g., 100.x.y.z)
+# or local IP if on same network.
+
+# ── Input helpers ──────────────────────────────────────────────────────────
+input_text:
+  clawscummer_prompt:
+    name: "ClawsCummer Prompt"
+    max: 1000
+    icon: mdi:robot
+
+input_boolean:
+  clawscummer_processing:
+    name: "ClawsCummer Processing"
+    icon: mdi:loading
+
+# ── REST command to send prompts ──────────────────────────────────────────
+rest_command:
+  clawscummer_send_prompt:
+    url: "http://CLAWSCUMMER_IP:7855/api/prompt"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+    payload: '{"prompt": "{{ prompt }}", "timeout": 120}'
+    timeout: 130
+    content_type: "application/json"
+
+# ── REST sensor for status ────────────────────────────────────────────────
+sensor:
+  - platform: rest
+    name: "ClawsCummer Status"
+    resource: "http://CLAWSCUMMER_IP:7855/api/status"
+    value_template: "{{ value_json.status }}"
+    json_attributes:
+      - cli_type
+    scan_interval: 10
+
+  - platform: rest
+    name: "ClawsCummer Last Response"
+    resource: "http://CLAWSCUMMER_IP:7855/api/response"
+    value_template: >-
+      {% if value_json.ok %}
+        {{ value_json.text[:255] }}
+      {% else %}
+        {{ value_json.error | default('No response') }}
+      {% endif %}
+    json_attributes:
+      - ok
+      - text
+    scan_interval: 30

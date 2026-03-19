@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClawsCummer v2.9</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+</head>
+<body>
+  <!-- Top Bar -->
+  <div id="topbar">
+    <div id="topbar-left">
+      <span id="logo">CLAWSCUMMER</span>
+      <span id="version">v2.5</span>
+    </div>
+    <div id="topbar-center">
+      <div id="account-group">
+        <div id="cli-indicator" class="badge badge-claude">C</div>
+        <select id="account-selector"></select>
+      </div>
+      <div id="mode-group">
+        <select id="mode-selector" title="Workflow mode">
+          <option value="auto">AUTO</option>
+          <option value="plan_execute">PLAN > EXEC</option>
+          <option value="manual">MANUAL</option>
+        </select>
+      </div>
+    </div>
+    <div id="topbar-right">
+      <div id="status-dot" class="status-idle" title="Idle"></div>
+      <button id="toggle-terminal-btn" class="topbar-btn" title="Toggle Terminal">&#9638;</button>
+      <button id="add-account-btn" class="topbar-btn" title="Add Account">+</button>
+    </div>
+  </div>
+
+  <!-- Status Banner (hidden by default) -->
+  <div id="status-banner" class="hidden">
+    <span id="status-text"></span>
+  </div>
+
+  <!-- Rate Limit Banner (hidden by default) -->
+  <div id="rate-limit-banner" class="hidden">
+    <span id="rate-limit-text"></span>
+    <button id="rate-limit-switch" onclick="onRateLimitSwitch()">Switch</button>
+    <button id="rate-limit-dismiss" onclick="onRateLimitDismiss()">Dismiss</button>
+  </div>
+
+  <!-- Main Content Area -->
+  <div id="main-area">
+    <!-- Launch Screen -->
+    <div id="launch-screen">
+      <div id="launch-content">
+        <div id="launch-logo">CLAWSCUMMER</div>
+        <div id="launch-subtitle">Unified AI Agent Manager</div>
+        <div id="launch-sessions"></div>
+        <div id="launch-new">
+          <input type="text" id="launch-prompt" placeholder="What do you want to work on?  Press Enter to launch...">
+        </div>
+        <div id="launch-hint">Type a prompt to start  &middot;  Click a session to resume</div>
+      </div>
+    </div>
+
+    <!-- Chat Panel (hidden until session starts) -->
+    <div id="chat-panel" class="hidden">
+      <div id="chat-messages"></div>
+      <div id="chat-input-bar">
+        <textarea id="chat-input" placeholder="Type a message..." rows="1"></textarea>
+        <button id="chat-send-btn" title="Send">&#9654;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal Panel (collapsible at bottom) -->
+  <div id="terminal-panel" class="hidden">
+    <div id="terminal-header">
+      <span id="terminal-label">Terminal</span>
+      <button id="terminal-collapse-btn" title="Collapse">&times;</button>
+    </div>
+    <div id="terminal-container"></div>
+  </div>
+
+  <!-- Add Account Modal -->
+  <div id="modal-overlay" class="hidden">
+    <div id="modal">
+      <div id="modal-title">Add Account</div>
+      <div id="modal-step" data-step="type">
+        <p>Select CLI type:</p>
+        <button class="modal-choice" data-type="claude">Claude &mdash; Anthropic Claude Code</button>
+        <button class="modal-choice" data-type="gemini">Gemini &mdash; Google Gemini CLI</button>
+        <button class="modal-choice" data-type="codex">Codex &mdash; OpenAI Codex CLI</button>
+      </div>
+      <div id="modal-name" class="hidden">
+        <p id="modal-name-label">Account name:</p>
+        <input type="text" id="modal-name-input" placeholder="e.g. Primary, Backup, Work...">
+        <button id="modal-name-submit" class="modal-submit">Next</button>
+      </div>
+      <div id="modal-auth" class="hidden">
+        <p>In a separate terminal, run:</p>
+        <code>claude auth logout && claude auth login</code>
+        <p>Log in to the new account, then click Done.</p>
+        <button id="modal-auth-done" class="modal-submit">Done</button>
+      </div>
+      <div id="modal-status" class="hidden"></div>
+      <button id="modal-close" class="modal-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

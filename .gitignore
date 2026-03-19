@@ -4,8 +4,19 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Never commit credentials
+# Build artifacts
+build/
+dist/
+*.spec
+
+# Never commit credentials or runtime state
+secrets.json
 clawscummer_accounts.json
+accounts.json
 *.credentials.json
 *.signal
 clawscummer_launch.json
+launch.json
+handoff.md
+plan.md
+.context_inject.md

@@ -1,0 +1,23 @@
+# ─── ClawsCummer Lovelace Card ─────────────────────────────────────────────
+# Add this as a manual card in any Lovelace view
+
+type: vertical-stack
+cards:
+  - type: entities
+    title: ClawsCummer
+    entities:
+      - entity: sensor.clawscummer_status
+        name: Status
+        icon: mdi:robot
+      - entity: input_text.clawscummer_prompt
+        name: Prompt
+      - entity: input_boolean.clawscummer_processing
+        name: Processing
+  - type: markdown
+    title: Last Response
+    content: >-
+      {% if state_attr('sensor.clawscummer_last_response', 'text') %}
+        {{ state_attr('sensor.clawscummer_last_response', 'text') }}
+      {% else %}
+        *No response yet*
+      {% endif %}
