@@ -292,15 +292,34 @@ class TerminalManager:
                             rate_buffer = ""
                             break
 
-                # Permission prompt detection — auto-approve reads, surface writes to UI
-                if re.search(r'(Allow|Permit|Grant)\s+.{0,50}(Read|Glob|Grep|Search|List|Bash\(git)', clean, re.IGNORECASE):
-                    # Auto-approve read operations
+                # Auto-approve trust/read prompts, surface writes to UI
+                # Workspace trust prompt (always auto-approve)
+                if re.search(r'trust\s+(this|the)\s+(folder|directory|workspace|project)', clean, re.IGNORECASE) or \
+                   re.search(r'(Yes|No).*trust', clean, re.IGNORECASE) or \
+                   re.search(r'Do you want to trust', clean, re.IGNORECASE) or \
+                   re.search(r'sandbox|full.access|workspace.write', clean, re.IGNORECASE) or \
+                   re.search(r'approve\s+(this|the)\s+(directory|project)', clean, re.IGNORECASE):
+                    self._pty.write("y\r")
+                    import sys
+                    print(f"[CC-PERM] Auto-approved workspace trust", flush=True)
+                # Read/search permissions (always auto-approve)
+                elif re.search(r'(Allow|Permit|Grant)\s+.{0,50}(Read|Glob|Grep|Search|List|Bash\(git)', clean, re.IGNORECASE):
                     self._pty.write("y\r")
                     import sys
                     print(f"[CC-PERM] Auto-approved read operation", flush=True)
-                elif re.search(r'(Allow|Permit|Grant)\s+.{0,80}\?\s*$', clean, re.IGNORECASE) or \
-                     re.search(r'(Allow|Permit)\s+(once|always|Write|Edit|Bash|Execute|Create|Delete)', clean, re.IGNORECASE):
-                    # Write/execute permission — surface to UI
+                # Any "yes/no" prompt that looks like a confirmation (auto-approve parent dirs etc.)
+                elif re.search(r'\(y\/?n\)|\[y\/?n\]|\(yes\/?no\)', clean, re.IGNORECASE):
+                    # Check if it's a read/trust/parent type prompt — auto-approve
+                    if re.search(r'(parent|read|trust|access|allow|continue|proceed)', clean, re.IGNORECASE):
+                        self._pty.write("y\r")
+                        import sys
+                        print(f"[CC-PERM] Auto-approved y/n prompt", flush=True)
+                    else:
+                        # Unknown prompt — surface to UI
+                        perm_text = clean.strip()[-200:] if clean.strip() else "Permission requested"
+                        self._push_status("permission_request", perm_text)
+                # Write/execute permission — surface to UI
+                elif re.search(r'(Allow|Permit)\s+(once|always|Write|Edit|Bash|Execute|Create|Delete)', clean, re.IGNORECASE):
                     perm_text = clean.strip()[-200:] if clean.strip() else "Permission requested"
                     self._push_status("permission_request", perm_text)
                     import sys

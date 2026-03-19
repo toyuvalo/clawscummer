@@ -167,12 +167,12 @@ class Api:
             full_prompt = prompt + md_hint
             def _send_prompt():
                 if self._terminal.wait_for_prompt(timeout=30):
-                    time.sleep(1.5)  # Let Ink fully initialize input handler
+                    time.sleep(1.0)  # Let Ink initialize input handler
                     if not self._terminal.is_alive():
                         return
                     # Write raw text (NO bracketed paste — Ink doesn't support it)
                     self._terminal.write(full_prompt)
-                    time.sleep(0.5)
+                    time.sleep(0.3)
                     if self._terminal.is_alive():
                         self._terminal.write("\r")
                     import sys

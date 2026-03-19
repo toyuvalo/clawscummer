@@ -405,7 +405,7 @@ function feedChat(data) {
       assistantBuffer = '';
       if (autoPromptPending) {
         discardUntilPrompt = true;
-        discardDeadline = Date.now() + 4000;
+        discardDeadline = Date.now() + 3000;
         autoPromptPending = false;
       }
       updateDebugBar();
@@ -462,7 +462,7 @@ function startResponsePolling() {
     } catch { responseSnapshotText = ''; }
   });
 
-  // Poll every 2s
+  // Poll every 1s for fast response detection
   responsePollTimer = setInterval(async () => {
     try {
       const result = JSON.parse(await pywebview.api.get_last_response());
@@ -474,7 +474,7 @@ function startResponsePolling() {
     } catch (e) {
       dbg(`POLL ERROR: ${e}`);
     }
-  }, 2000);
+  }, 1000);
 }
 
 function stopResponsePolling() {
