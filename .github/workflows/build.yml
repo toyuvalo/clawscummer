@@ -1,0 +1,89 @@
+name: Build Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: clawscummer
+            asset_name: clawscummer-linux
+          - os: macos-latest
+            artifact_name: clawscummer
+            asset_name: clawscummer-macos
+          - os: windows-latest
+            artifact_name: clawscummer.exe
+            asset_name: clawscummer-windows.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyinstaller textual rich
+
+      - name: Build (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: bash build.sh
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m PyInstaller clawscummer.py `
+            --onefile `
+            --console `
+            --name clawscummer `
+            --collect-all textual `
+            --collect-all rich `
+            --hidden-import textual `
+            --hidden-import textual.app `
+            --hidden-import textual._xterm_theme `
+            --hidden-import textual.css.query `
+            --hidden-import textual.widgets._list_view `
+            --hidden-import textual.widgets._list_item `
+            --hidden-import textual.widgets._input `
+            --hidden-import textual.widgets._button `
+            --hidden-import textual.widgets._label `
+            --hidden-import textual.widgets._static `
+            --hidden-import textual.widgets._rule `
+            --hidden-import textual.containers `
+            --hidden-import textual.screen `
+            --noconfirm `
+            --clean
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
+          if-no-files-found: error
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.asset_name }}
+          generate_release_notes: true

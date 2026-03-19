@@ -557,9 +557,12 @@ class ConversationScanner:
 
     @staticmethod
     def decode_path(key: str) -> str:
-        result = re.sub(r'^([A-Za-z])--', r'\1:\\', key)
-        result = result.replace("--", "\\").replace("-", "\\")
-        return result
+        # Windows: C--Users--user--project → C:\Users\user\project
+        if re.match(r'^[A-Za-z]--', key):
+            result = re.sub(r'^([A-Za-z])--', r'\1:\\', key)
+            return result.replace("--", "\\").replace("-", "\\")
+        # Unix: -home-user-project → /home/user/project
+        return key.replace("-", "/")
 
     @staticmethod
     def _extract_text(content) -> str:
@@ -1683,8 +1686,15 @@ def main():
         while True:
             if check():
                 SIGNAL_FILE.write_text("switch")
-                subprocess.run(["taskkill", "/F", "/PID", str(args.watch)],
-                               capture_output=True)
+                if sys.platform == "win32":
+                    subprocess.run(["taskkill", "/F", "/PID", str(args.watch)],
+                                   capture_output=True)
+                else:
+                    import signal as _signal
+                    try:
+                        os.kill(args.watch, _signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
                 sys.exit(0)
             time.sleep(2)
         return
