@@ -41,7 +41,7 @@ GEMINI_DIR      = Path.home() / ".gemini"
 CLAWSCUMMER_DIR = Path.home() / ".clawscummer"
 
 def _secure_dir(d: Path):
-    """Create directory with restrictive permissions (current user only on Windows)."""
+    """Create directory with restrictive permissions (current user only)."""
     d.mkdir(parents=True, exist_ok=True)
     if os.name == "nt":
         try:
@@ -54,7 +54,14 @@ def _secure_dir(d: Path):
         except Exception as e:
             import sys
             print(f"[ClawsCummer] Warning: Could not restrict permissions on {d}: {e}", file=sys.stderr)
+    else:
+        try:
+            d.chmod(0o700)
+        except Exception:
+            pass
 ACCOUNTS_FILE   = CLAWSCUMMER_DIR / "accounts.json"
+CREDS_DIR       = CLAWSCUMMER_DIR / "creds"
+STAGING_DIR     = CLAWSCUMMER_DIR / "staging"
 CREDS_FILE      = CLAUDE_DIR / ".credentials.json"
 PROJECTS_DIR    = CLAUDE_DIR / "projects"
 LAUNCH_FILE     = CLAWSCUMMER_DIR / "launch.json"
@@ -396,11 +403,15 @@ class PlanExecuteManager:
 class AccountManager:
     def __init__(self):
         _secure_dir(CLAWSCUMMER_DIR)
+        _secure_dir(CREDS_DIR)
         self._migrate()
         self._bootstrap()
 
+    def _creds_path(self, account_id: str) -> Path:
+        return CREDS_DIR / f"{account_id}.json"
+
     def _migrate(self):
-        """Migrate accounts from old location to new."""
+        """Migrate accounts from old location and extract embedded creds to files."""
         if OLD_ACCOUNTS_FILE.exists() and not ACCOUNTS_FILE.exists():
             try:
                 data = json.loads(OLD_ACCOUNTS_FILE.read_text(encoding="utf-8"))
@@ -410,6 +421,19 @@ class AccountManager:
                 if "workflow_mode" not in data:
                     data["workflow_mode"] = "auto"
                 ACCOUNTS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+        # Extract any embedded credentials to per-account files
+        if ACCOUNTS_FILE.exists():
+            try:
+                data = json.loads(ACCOUNTS_FILE.read_text(encoding="utf-8"))
+                for acc_data in data.get("accounts", []):
+                    creds = acc_data.get("credentials") or {}
+                    acc_id = acc_data.get("id", "")
+                    if creds and acc_id:
+                        cp = self._creds_path(acc_id)
+                        if not cp.exists():
+                            cp.write_text(json.dumps(creds, indent=2), encoding="utf-8")
             except Exception:
                 pass
 
@@ -423,8 +447,12 @@ class AccountManager:
                 email = self._find_email(creds)
                 acc = Account(
                     id="claude_1", label="Claude Primary", cli_type="claude",
-                    email=email, credentials=creds,
+                    email=email, credentials={},
                     last_used=datetime.now(timezone.utc).isoformat(),
+                )
+                # Save credentials to per-account file instead of embedding
+                self._creds_path("claude_1").write_text(
+                    json.dumps(creds, indent=2), encoding="utf-8"
                 )
                 data["accounts"].append(acc.to_dict())
                 data["active_id"] = "claude_1"
@@ -482,17 +510,28 @@ class AccountManager:
 
         # Only swap credentials for Claude accounts
         if account.cli_type == "claude":
+            # Save current live credentials back to the old account's file
             if active_id and CREDS_FILE.exists():
                 try:
                     live = json.loads(CREDS_FILE.read_text(encoding="utf-8"))
-                    for a in accounts:
-                        if a.id == active_id and a.cli_type == "claude":
-                            a.credentials = live
+                    self._creds_path(active_id).write_text(
+                        json.dumps(live, indent=2), encoding="utf-8"
+                    )
                 except Exception:
                     pass
-            if account.credentials:
+
+            # Load target account credentials (file takes priority over embedded)
+            target_creds = account.credentials or {}
+            cp = self._creds_path(account.id)
+            if cp.exists():
+                try:
+                    target_creds = json.loads(cp.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+
+            if target_creds:
                 CREDS_FILE.write_text(
-                    json.dumps(account.credentials, indent=2), encoding="utf-8"
+                    json.dumps(target_creds, indent=2), encoding="utf-8"
                 )
 
         account.last_used = datetime.now(timezone.utc).isoformat()
@@ -534,17 +573,27 @@ class AccountManager:
         count = sum(1 for a in accounts if a.cli_type == cli_type) + 1
         new_id = f"{prefix}_{count}"
 
-        creds, email = {}, ""
-        if cli_type == "claude" and CREDS_FILE.exists():
-            try:
-                creds = json.loads(CREDS_FILE.read_text(encoding="utf-8"))
-                email = self._find_email(creds)
-            except Exception:
-                pass
+        email = ""
+        if cli_type == "claude":
+            # Read from staging dir (user logged in there without touching main creds)
+            staging_creds_file = STAGING_DIR / ".credentials.json"
+            src = staging_creds_file if staging_creds_file.exists() else None
+            if src:
+                try:
+                    creds = json.loads(src.read_text(encoding="utf-8"))
+                    email = self._find_email(creds)
+                    self._creds_path(new_id).write_text(
+                        json.dumps(creds, indent=2), encoding="utf-8"
+                    )
+                    # Clean up staging
+                    src.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
         acc = Account(
             id=new_id, label=label, cli_type=cli_type, email=email,
-            credentials=creds, last_used=datetime.now(timezone.utc).isoformat(),
+            credentials={},
+            last_used=datetime.now(timezone.utc).isoformat(),
         )
         accounts.append(acc)
         data["accounts"] = [a.to_dict() for a in accounts]
@@ -826,11 +875,11 @@ class AddAccountScreen(Screen):
 
     def on_input_submitted(self, ev: Input.Submitted):
         val = ev.value.strip()
-        if not val:
-            self.query_one("#add-status", Label).update("  Please enter a name.")
-            return
 
         if self._step == "name":
+            if not val:
+                self.query_one("#add-status", Label).update("  Please enter a name.")
+                return
             self._label = val
             if self._cli_type == "gemini":
                 acc = self.am.add_account(self._label, "gemini")
@@ -839,16 +888,23 @@ class AddAccountScreen(Screen):
                 )
                 self.app.pop_screen()
             else:
+                # Prepare staging dir for the new login
+                STAGING_DIR.mkdir(parents=True, exist_ok=True)
+                staging_str = str(STAGING_DIR)
+                if sys.platform == "win32":
+                    cmd = f'$env:CLAUDE_CONFIG_DIR="{staging_str}"; claude auth login'
+                else:
+                    cmd = f'CLAUDE_CONFIG_DIR="{staging_str}" claude auth login'
                 self._step = "auth"
                 self.query_one("#add-instr", Label).update(
                     f"  Account name: '{val}'\n\n"
-                    "  Step 3: In a separate terminal run:\n\n"
-                    "      claude auth logout\n"
-                    "      claude auth login\n\n"
-                    "  Log in to your other account, then press Enter here."
+                    "  In a separate terminal, run:\n\n"
+                    f"      {cmd}\n\n"
+                    "  Log in to your other Claude account, then press Enter here.\n"
+                    "  (Your current session is NOT interrupted.)"
                 )
                 ev.input.value = ""
-                ev.input.placeholder = "Press Enter once logged in to new account..."
+                ev.input.placeholder = "Press Enter once logged in..."
         elif self._step == "auth":
             acc = self.am.add_account(self._label, "claude")
             self.query_one("#add-status", Label).update(
