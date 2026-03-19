@@ -94,10 +94,12 @@ class TerminalManager:
             return f'"{s}"'
 
         # For .cmd/.bat files, spawn via cmd.exe
+        # Wrap entire command in outer quotes for cmd.exe /c parsing
         if exe.upper().endswith(('.CMD', '.BAT')):
-            cmdline = f'cmd.exe /c {_quote(exe)}'
+            inner = _quote(exe)
             if len(cmd) > 1:
-                cmdline += " " + " ".join(_quote(a) for a in cmd[1:])
+                inner += " " + " ".join(_quote(a) for a in cmd[1:])
+            cmdline = f'cmd.exe /c "{inner}"'
             spawn_exe = "cmd.exe"
         else:
             spawn_exe = exe
