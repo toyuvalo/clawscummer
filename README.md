@@ -1,8 +1,10 @@
-# ClawsCummer
+<h1 align="center">ClawsCummer</h1>
+
+<p align="center">
+  <img src="clawscummer_thumb.png" width="480" alt="ClawsCummer TUI" />
+</p>
 
 **Multi-account Claude & Gemini session manager.** Seamlessly switch accounts on rate limit, browse past conversations, and pick up exactly where you left off.
-
-![ClawsCummer TUI](clawscummer_thumb.png)
 
 ---
 
