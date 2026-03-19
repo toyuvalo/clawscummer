@@ -42,6 +42,7 @@ class Api:
         self._current_cwd = os.getcwd()
         self._switch_lock = threading.Lock()
         self._launch_lock = threading.Lock()
+        self._session_start_time = 0  # timestamp when current session launched
 
     def set_window(self, window):
         self._window = window
@@ -160,6 +161,7 @@ class Api:
 
         # Launch in PTY
         self._terminal._on_rate_limit = lambda: self._handle_rate_limit(cwd, md_hint)
+        self._session_start_time = time.time()
         self._terminal.start_session(cmd, cwd)
 
         # Send prompt via PTY input after CLI prompt appears
@@ -402,12 +404,14 @@ class Api:
         if not best_dir:
             return None
 
-        # Find the most recently modified .jsonl file in this project
+        # Find the most recently modified .jsonl file created AFTER session start
         jsonl_files = list(best_dir.glob("*.jsonl"))
         if not jsonl_files:
             return None
 
-        newest = max(jsonl_files, key=lambda f: f.stat().st_mtime)
+        # Prefer files modified after the current session started
+        session_files = [f for f in jsonl_files if f.stat().st_mtime >= self._session_start_time - 5]
+        newest = max(session_files or jsonl_files, key=lambda f: f.stat().st_mtime)
 
         # Read messages and find the last assistant response AFTER a user message
         messages = []
