@@ -46,6 +46,7 @@ class TerminalManager:
         self._recent_lock = threading.Lock()
         self._debug_log = None
         self._auth_detected = False  # Prevent repeated auth notifications
+        self._perm_approved = False  # Prevent repeated permission auto-approvals
 
     def set_window(self, window):
         """Set the pywebview window for evaluate_js calls."""
@@ -157,6 +158,7 @@ class TerminalManager:
         self._alive = True
         self._has_output = False
         self._auth_detected = False
+        self._perm_approved = False
         self._prompt_event.clear()
         with self._recent_lock:
             self._recent_output = ""
@@ -296,25 +298,34 @@ class TerminalManager:
                             break
 
                 # Auto-approve ALL permission/trust/confirmation prompts
-                # Claude bypass-permissions: numbered menu "1. No  2. Yes" → send "2\r"
-                if re.search(r'Yes,\s*I\s*accept|2\.\s*Yes', clean, re.IGNORECASE) or \
-                   re.search(r'Bypass\s*Permissions\s*mode', clean, re.IGNORECASE):
-                    self._pty.write("2\r")
-                    import sys
-                    print(f"[CC-PERM] Auto-accepted bypass permissions (2)", flush=True)
-                # Codex/general trust: "Do you trust" → send "y\r"
-                elif re.search(r'trust\s+(the\s+)?contents', clean, re.IGNORECASE) or \
-                     re.search(r'Do you trust', clean, re.IGNORECASE):
-                    self._pty.write("y\r")
-                    import sys
-                    print(f"[CC-PERM] Auto-approved trust: {clean.strip()[:80]}", flush=True)
-                # Any other y/n or confirm prompt
-                elif re.search(r'\(y\/?n\)|\[y\/?n\]|yes\/?no|y\/n', clean, re.IGNORECASE) or \
-                     re.search(r'(allow|permit|approve|confirm|accept|grant|continue|proceed)', clean, re.IGNORECASE) or \
-                     re.search(r'(Do you want|Would you like)', clean, re.IGNORECASE):
-                    self._pty.write("y\r")
-                    import sys
-                    print(f"[CC-PERM] Auto-approved: {clean.strip()[:80]}", flush=True)
+                # Use accumulated recent output (not per-chunk) so split text is detected
+                with self._recent_lock:
+                    recent_clean = self._strip_ansi(self._recent_output).lower()
+
+                if not self._perm_approved:
+                    # Claude bypass-permissions: numbered menu "1. No  2. Yes" → send "2"
+                    if 'yes' in recent_clean and 'accept' in recent_clean and 'bypass' in recent_clean:
+                        self._pty.write("2\r")
+                        self._perm_approved = True
+                        with self._recent_lock:
+                            self._recent_output = ""
+                        import sys
+                        print(f"[CC-PERM] Auto-accepted bypass permissions (2)", flush=True)
+                    # Codex/general trust: "Do you trust" → send "y"
+                    elif 'trust' in recent_clean and ('contents' in recent_clean or 'directory' in recent_clean):
+                        self._pty.write("y\r")
+                        self._perm_approved = True
+                        with self._recent_lock:
+                            self._recent_output = ""
+                        import sys
+                        print(f"[CC-PERM] Auto-approved trust prompt", flush=True)
+                    # Any y/n confirm prompt
+                    elif re.search(r'y/n|yes/no|\(y\)', recent_clean):
+                        self._pty.write("y\r")
+                        with self._recent_lock:
+                            self._recent_output = ""
+                        import sys
+                        print(f"[CC-PERM] Auto-approved y/n prompt", flush=True)
 
                 # Auth detection — check if CLI is prompting for login
                 if not self._auth_detected:
