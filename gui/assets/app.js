@@ -71,6 +71,19 @@ window.handleStatus = function(msg) {
   } else if (msg.event === 'rate_limit_ask') {
     setStatus('switching');
     showRateLimitBanner(msg.text || 'Rate limit detected.');
+  } else if (msg.event === 'permission_request') {
+    // Show permission request as a chat message with Allow button
+    const permEl = document.createElement('div');
+    permEl.className = 'chat-msg chat-msg-permission';
+    permEl.innerHTML = `
+      <div class="perm-text">${escapeHtml(msg.text || 'Permission requested')}</div>
+      <div class="perm-actions">
+        <button class="perm-btn perm-allow" onclick="approvePermission(this)">Allow</button>
+        <button class="perm-btn perm-deny" onclick="denyPermission(this)">Deny</button>
+      </div>
+    `;
+    document.getElementById('chat-messages').appendChild(permEl);
+    scrollChatToBottom();
   } else if (msg.event === 'auth_required') {
     setStatus('idle');
     // Stop thinking indicator and polling
@@ -924,6 +937,18 @@ async function onRateLimitDismiss() {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Permission handling ───────────────────────────────────────────────────
+function approvePermission(btn) {
+  pywebview.api.pty_input('y\r');
+  btn.closest('.chat-msg-permission').classList.add('perm-resolved');
+  btn.closest('.perm-actions').innerHTML = '<span class="perm-approved">Allowed</span>';
+}
+function denyPermission(btn) {
+  pywebview.api.pty_input('n\r');
+  btn.closest('.chat-msg-permission').classList.add('perm-resolved');
+  btn.closest('.perm-actions').innerHTML = '<span class="perm-denied">Denied</span>';
+}
+
 function updateCliBadge() {
   const selector = document.getElementById('account-selector');
   const opt = selector.options[selector.selectedIndex];

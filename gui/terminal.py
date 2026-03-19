@@ -292,6 +292,20 @@ class TerminalManager:
                             rate_buffer = ""
                             break
 
+                # Permission prompt detection — auto-approve reads, surface writes to UI
+                if re.search(r'(Allow|Permit|Grant)\s+.{0,50}(Read|Glob|Grep|Search|List|Bash\(git)', clean, re.IGNORECASE):
+                    # Auto-approve read operations
+                    self._pty.write("y\r")
+                    import sys
+                    print(f"[CC-PERM] Auto-approved read operation", flush=True)
+                elif re.search(r'(Allow|Permit|Grant)\s+.{0,80}\?\s*$', clean, re.IGNORECASE) or \
+                     re.search(r'(Allow|Permit)\s+(once|always|Write|Edit|Bash|Execute|Create|Delete)', clean, re.IGNORECASE):
+                    # Write/execute permission — surface to UI
+                    perm_text = clean.strip()[-200:] if clean.strip() else "Permission requested"
+                    self._push_status("permission_request", perm_text)
+                    import sys
+                    print(f"[CC-PERM] Write permission surfaced to UI: {perm_text[:80]}", flush=True)
+
                 # Auth detection — check if CLI is prompting for login
                 if not self._auth_detected:
                     auth_patterns = [

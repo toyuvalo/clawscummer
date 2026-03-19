@@ -188,7 +188,7 @@ class Api:
     def _build_cmd(self, cli_type: str, action: str, prompt: str = "",
                    md_hint: str = "") -> list[str]:
         if cli_type == "claude":
-            cmd = ["claude", "--allowedTools", "Read,Glob,Grep,Bash(git:*)"]
+            cmd = ["claude", "--allowedTools", "Read,Glob,Grep,Bash(git:*),Search,ListDir"]
             if action == "resume":
                 cmd.append("--continue")
         elif cli_type == "codex":
