@@ -1,0 +1,21 @@
+=== PTY session started: cmd.exe /c ""C:\Users\toyuv\AppData\Roaming\npm\codex.CMD" "--full-auto"" ===
+[RAW] '\x1b[?2026h\x1b[1;40H\x1b[0m\x1b[49m\x1b[K\x1b[2;2H\x1b[0m\x1b[49m\x1b[K\x1b[3;112H\x1b[0m\x1b[49m\x1b[K\x1b[4;13H\x1b[0m\x1b[49m\x1b[K\x1b[5;2H\x1b[0m\x1b[49m\x1b[K\x1b[6;19H\x1b[0m\x1b[49m\x1b[K\x1b[7;14H\x1b[0m\x1b[49m\x1b[K\x1b[8;2H\x1b[0m\x1b[49m\x1b[K\x1b[9;26H\x1b[0m\x1b[49m\x1b[K\x1b[10;2H\x1b[0m\x1b[49m\x1b[K\x1b[11'
+[CLN] >You are in C:\Users\toyuv\clawscummerDoyoutrustthecontentsofthisdirectory?Workingwithuntrustedcontentscomeswithhigherriskofpromptinjection.› 1. Yes, continue2.No,quitPress enter to continue
+[RAW] '\x1b[1;2H\x1b[0m\x1b[49m\x1b[K\x1b[2;42H\x1b[0m\x1b[49m\x1b[K\x1b[3;42H\x1b[0m\x1b[49m\x1b[K\x1b[4;42H\x1b[0m\x1b[49m\x1b[K\x1b[5;42H\x1b[0m\x1b[49m\x1b[K\x1b[6;42H\x1b[0m\x1b[49m\x1b[K\x1b[7;42H\x1b[0m\x1b[49m\x1b[K\x1b[8;2H\x1b[0m\x1b[49m\x1b[K\x1b[9;2H\x1b[0m\x1b[49m\x1b[K\x1b[10;37H\x1b[0m\x1b[49m\x1b[K\x1b[11;2H\x1b[0m\x1b'
+[CLN] ╭───────────────────────────────────────╮│ >_ OpenAI Codex (v0.116.0)            ││                                       ││ model:     loading   /model to change ││ directory: ~\clawscummer          
+[RAW] '\x1b[?2026h\x1b[1;2H\x1b[0m\x1b[49m\x1b[K\x1b[2;42H\x1b[0m\x1b[49m\x1b[K\x1b[3;42H\x1b[0m\x1b[49m\x1b[K\x1b[4;42H\x1b[0m\x1b[49m\x1b[K\x1b[5;42H\x1b[0m\x1b[49m\x1b[K\x1b[6;42H\x1b[0m\x1b[49m\x1b[K\x1b[7;42H\x1b[0m\x1b[49m\x1b[K\x1b[8;2H\x1b[0m\x1b[49m\x1b[K\x1b[9;2H\x1b[0m\x1b[49m\x1b[K\x1b[10;37H\x1b[0m\x1b[49m\x1b[K\x1b[11'
+[CLN] gpt-5.3-codex default · 100% left · ~\clawscummer
+[RAW] '\r\n\x1b[39;49m\x1b[K\x1b[2m╭─────────────────────────────────────────────╮\x1b[39m\x1b[49m\x1b[0m\r\n'
+[CLN] ╭─────────────────────────────────────────────╮
+[RAW] '\x1b[39;49m\x1b[K\x1b[2m│ >_ \x1b[22m\x1b[1mOpenAI Codex\x1b[22m\x1b[2m\x1b[2m (v0.116.0)                  │\x1b[39m\x1b[49m\x1b[0m\r\n\x1b[39;49m\x1b[K\x1b[2m│                                             │\x1b[39m\x1b[49m\x1b[0m'
+[CLN] │ >_ OpenAI Codex (v0.116.0)                  │
+│                                             │
+[RAW] '\r\n\x1b[39;49m\x1b[K\x1b[2m│ model:     \x1b[22mgpt-5.3-codex\x1b[2m   \x1b[22m\x1b[38;5;6;49m/model\x1b[2m\x1b[39;49m to change │\x1b[39m\x1b[49m\x1b[0m\r\n'
+[CLN] │ model:     gpt-5.3-codex   /model to change │
+[RAW] '\x1b[39;49m\x1b[K\x1b[2m│ directory: \x1b[22m~\\clawscummer\x1b[2m                    │\x1b[39m\x1b[49m\x1b[0m\r\n\x1b[39;49m\x1b[K\x1b[2m╰─────────────────────────────────────────────╯\x1b[39m\x1b[49m\x1b[0m'
+[CLN] │ directory: ~\clawscummer                    │
+╰─────────────────────────────────────────────╯
+[RAW] "\x1b[39;49m\x1b[K  \x1b[1mTip:\x1b[22m \x1b[3mNew\x1b[23m Try the \x1b[1mCodex App\x1b[22m, now available on \x1b[1mWindows\x1b[22m, with 2x rate limits until \x1b[3mApril 2nd\x1b[23m. Run 'codex app' or visit\x1b[39m\x1b[49m\x1b[0m\r\n"
+[CLN] Tip: New Try the Codex App, now available on Windows, with 2x rate limits until April 2nd. Run 'codex app' or visit
+[RAW] '\x1b[39;49m\x1b[K  https://chatgpt.com/codex?app-landing-page=true\x1b[39m\x1b[49m\x1b[0m\x1b[r\x1b[10;3H\x1b[10;2H\x1b[0m\x1b[49m\x1b[K\x1b[11;2H\x1b[0m\x1b[49m\x1b[K\x1b[12;37H\x1b[0m\x1b[49m\x1b[K\x1b[13;2H\x1b[0m\x1b[49m\x1b[K\x1b[14;52H\x1b[0m\x1b[49m\x1b[K\x1b[12;1H\x1b[1m›\x1b[12;3H'
+[CLN] https://chatgpt.com/codex?app-landing-page=true›Improve documentation in @filename  gpt-5.3-codex default · 100% left · ~\clawscummer

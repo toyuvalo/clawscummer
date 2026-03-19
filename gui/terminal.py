@@ -255,7 +255,8 @@ class TerminalManager:
                         self._recent_output = self._recent_output[-500:]
                     # Comprehensive ANSI strip for prompt detection
                     clean = self._strip_ansi(self._recent_output)
-                    if re.search(r'❯', clean) or re.search(r'\?\s*for\s*shortcuts', clean):
+                    if re.search(r'❯', clean) or re.search(r'\?\s*for\s*shortcuts', clean) or \
+                       re.search(r'^\s*>\s*$', clean, re.MULTILINE):  # Codex prompt
                         if not self._prompt_event.is_set():
                             import sys
                             print(f"[CC-PROMPT] Detected CLI prompt ready", flush=True)
@@ -295,11 +296,22 @@ class TerminalManager:
                             break
 
                 # Auto-approve ALL permission/trust/confirmation prompts
-                # The CLIs already run with skip-permissions/yolo/full-auto flags,
-                # but if anything still slips through, approve it immediately
-                if re.search(r'\(y\/?n\)|\[y\/?n\]|\(yes\/?no\)|y\/n|yes\/no', clean, re.IGNORECASE) or \
-                   re.search(r'(trust|allow|permit|approve|confirm|accept|grant|continue|proceed)\s', clean, re.IGNORECASE) or \
-                   re.search(r'(Do you want|Would you like|Shall I|Can I)', clean, re.IGNORECASE):
+                # Claude bypass-permissions: numbered menu "1. No  2. Yes" → send "2\r"
+                if re.search(r'Yes,\s*I\s*accept|2\.\s*Yes', clean, re.IGNORECASE) or \
+                   re.search(r'Bypass\s*Permissions\s*mode', clean, re.IGNORECASE):
+                    self._pty.write("2\r")
+                    import sys
+                    print(f"[CC-PERM] Auto-accepted bypass permissions (2)", flush=True)
+                # Codex/general trust: "Do you trust" → send "y\r"
+                elif re.search(r'trust\s+(the\s+)?contents', clean, re.IGNORECASE) or \
+                     re.search(r'Do you trust', clean, re.IGNORECASE):
+                    self._pty.write("y\r")
+                    import sys
+                    print(f"[CC-PERM] Auto-approved trust: {clean.strip()[:80]}", flush=True)
+                # Any other y/n or confirm prompt
+                elif re.search(r'\(y\/?n\)|\[y\/?n\]|yes\/?no|y\/n', clean, re.IGNORECASE) or \
+                     re.search(r'(allow|permit|approve|confirm|accept|grant|continue|proceed)', clean, re.IGNORECASE) or \
+                     re.search(r'(Do you want|Would you like)', clean, re.IGNORECASE):
                     self._pty.write("y\r")
                     import sys
                     print(f"[CC-PERM] Auto-approved: {clean.strip()[:80]}", flush=True)
