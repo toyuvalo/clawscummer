@@ -9,6 +9,9 @@ build/
 dist/
 *.spec
 
+# Runtime logs
+*.log
+
 # Never commit credentials or runtime state
 secrets.json
 clawscummer_accounts.json
