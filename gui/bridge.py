@@ -188,7 +188,7 @@ class Api:
     def _build_cmd(self, cli_type: str, action: str, prompt: str = "",
                    md_hint: str = "") -> list[str]:
         if cli_type == "claude":
-            cmd = ["claude", "--allowedTools", "Read,Glob,Grep,Bash(git:*),Search,ListDir"]
+            cmd = ["claude", "--dangerously-skip-permissions"]
             if action == "resume":
                 cmd.append("--continue")
         elif cli_type == "codex":
@@ -196,7 +196,7 @@ class Api:
             if action == "resume":
                 cmd = ["codex", "resume", "--last"]
         else:  # gemini
-            cmd = ["gemini"]
+            cmd = ["gemini", "-y"]
             if action == "resume":
                 cmd.extend(["--resume", "latest"])
         return cmd
