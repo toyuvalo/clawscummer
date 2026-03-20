@@ -142,7 +142,7 @@ async function loadSessions() {
           <span class="session-cli ${cliClass}">${cliLabel}</span>
           ${escapeHtml(topic)}
         </div>
-        <div class="session-meta">${s.project_key} · ${age} · ${s.message_count} msgs</div>
+        <div class="session-meta">${escapeHtml(s.project_key)} · ${age} · ${s.message_count} msgs</div>
       `;
       card.addEventListener('click', () => resumeSession(s));
       container.appendChild(card);
@@ -344,16 +344,13 @@ function updateThinking(thinkingLines, toolLines) {
 
 function finalizeThinking() {
   if (!currentThinkingEl) return;
-  // Replace animated dots with static checkmark
   const summary = currentThinkingEl.querySelector('summary');
   if (summary) {
-    const thinkingContent = currentThinkingEl.querySelector('.thinking-content');
-    const hasContent = thinkingContent && thinkingContent.textContent.trim();
-    if (hasContent) {
-      const elapsed = thinkingStartTime ? Math.round((Date.now() - thinkingStartTime) / 1000) : 0;
+    const elapsed = thinkingStartTime ? Math.round((Date.now() - thinkingStartTime) / 1000) : 0;
+    // Always show "Thought for Ns" — even without detailed content
+    if (elapsed > 0) {
       summary.innerHTML = `<span class="thinking-indicator thinking-done">Thought for ${elapsed}s</span>`;
     } else {
-      // No thinking content — remove the block entirely
       currentThinkingEl.remove();
       currentThinkingEl = null;
     }

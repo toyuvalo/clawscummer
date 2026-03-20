@@ -569,7 +569,7 @@ class AccountManager:
     def add_account(self, label: str, cli_type: str = "claude") -> Account:
         data = self._load_raw()
         accounts = [Account.from_dict(a) for a in data.get("accounts", [])]
-        prefix = "claude" if cli_type == "claude" else "gemini"
+        prefix = {"claude": "claude", "gemini": "gemini", "codex": "codex"}.get(cli_type, cli_type)
         count = sum(1 for a in accounts if a.cli_type == cli_type) + 1
         new_id = f"{prefix}_{count}"
 

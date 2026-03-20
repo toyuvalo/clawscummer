@@ -302,57 +302,60 @@ class TerminalManager:
                 with self._recent_lock:
                     recent_clean = self._strip_ansi(self._recent_output).lower()
 
-                if not self._perm_approved:
-                    # Workspace trust prompts — always safe to approve (just directory access)
-                    if 'trust' in recent_clean and ('contents' in recent_clean or 'directory' in recent_clean or 'folder' in recent_clean or 'workspace' in recent_clean):
-                        self._pty.write("y\r")
-                        self._perm_approved = True
-                        with self._recent_lock:
-                            self._recent_output = ""
-                        import sys
-                        print(f"[CC-PERM] Auto-approved workspace trust", flush=True)
-                    # Read-only tool prompts — auto-approve
-                    elif re.search(r'(allow|permit).{0,30}(read|glob|grep|search|list|view|cat)', recent_clean):
-                        self._pty.write("y\r")
-                        with self._recent_lock:
-                            self._recent_output = ""
-                        import sys
-                        print(f"[CC-PERM] Auto-approved read tool", flush=True)
-                    # Write/edit/execute/delete prompts — surface to UI for user decision
-                    elif re.search(r'(allow|permit|approve).{0,30}(write|edit|create|delete|execute|bash|run|install|remove)', recent_clean):
-                        perm_text = recent_clean.strip()[-300:]
-                        self._push_status("permission_request", perm_text)
-                        with self._recent_lock:
-                            self._recent_output = ""
-                        import sys
-                        print(f"[CC-PERM] Write permission → UI: {perm_text[:80]}", flush=True)
-                    # Generic y/n that mentions read/trust/parent — auto-approve
-                    elif re.search(r'y/n|yes/no', recent_clean) and \
-                         re.search(r'(read|trust|parent|access|continue)', recent_clean):
-                        self._pty.write("y\r")
-                        with self._recent_lock:
-                            self._recent_output = ""
-                        import sys
-                        print(f"[CC-PERM] Auto-approved read/trust y/n", flush=True)
-                    # Generic y/n that mentions write/edit/delete — surface to UI
-                    elif re.search(r'y/n|yes/no', recent_clean) and \
-                         re.search(r'(write|edit|delete|execute|overwrite|remove)', recent_clean):
-                        perm_text = recent_clean.strip()[-300:]
-                        self._push_status("permission_request", perm_text)
-                        with self._recent_lock:
-                            self._recent_output = ""
-                        import sys
-                        print(f"[CC-PERM] Write y/n → UI: {perm_text[:80]}", flush=True)
+                # Workspace trust prompts — always safe to approve
+                if not self._perm_approved and \
+                   'trust' in recent_clean and ('contents' in recent_clean or 'directory' in recent_clean or 'folder' in recent_clean or 'workspace' in recent_clean):
+                    self._pty.write("y\r")
+                    self._perm_approved = True  # Only prevents re-triggering trust, NOT write prompts
+                    with self._recent_lock:
+                        self._recent_output = ""
+                    import sys
+                    print(f"[CC-PERM] Auto-approved workspace trust", flush=True)
+                # Read-only tool prompts — auto-approve (always checked, not gated by _perm_approved)
+                elif re.search(r'(allow|permit).{0,30}(read|glob|grep|search|list|view|cat)', recent_clean):
+                    self._pty.write("y\r")
+                    with self._recent_lock:
+                        self._recent_output = ""
+                    import sys
+                    print(f"[CC-PERM] Auto-approved read tool", flush=True)
+                # Write/edit/execute/delete prompts — surface to UI (always checked)
+                elif re.search(r'(allow|permit|approve).{0,30}(write|edit|create|delete|execute|bash|run|install|remove)', recent_clean):
+                    perm_text = recent_clean.strip()[-300:]
+                    self._push_status("permission_request", perm_text)
+                    with self._recent_lock:
+                        self._recent_output = ""
+                    import sys
+                    print(f"[CC-PERM] Write permission → UI: {perm_text[:80]}", flush=True)
+                # Generic y/n with read/trust context — auto-approve
+                elif re.search(r'y/n|yes/no', recent_clean) and \
+                     re.search(r'(read|trust|parent|access|continue)', recent_clean):
+                    self._pty.write("y\r")
+                    with self._recent_lock:
+                        self._recent_output = ""
+                    import sys
+                    print(f"[CC-PERM] Auto-approved read/trust y/n", flush=True)
+                # Generic y/n with write context — surface to UI
+                elif re.search(r'y/n|yes/no', recent_clean) and \
+                     re.search(r'(write|edit|delete|execute|overwrite|remove)', recent_clean):
+                    perm_text = recent_clean.strip()[-300:]
+                    self._push_status("permission_request", perm_text)
+                    with self._recent_lock:
+                        self._recent_output = ""
+                    import sys
+                    print(f"[CC-PERM] Write y/n → UI: {perm_text[:80]}", flush=True)
 
                 # Auth detection — check if CLI is prompting for login
                 if not self._auth_detected:
+                    # Very specific patterns to avoid false positives from prompt text
                     auth_patterns = [
-                        r'auth\s+login', r'log\s*in\s+to', r'authenticate',
-                        r'not\s+logged\s+in', r'please\s+sign\s+in',
-                        r'API\s+key', r'access\s+token',
-                        r'codex\s+login', r'oauth', r'authorization',
-                        r'session\s+expired', r'credentials',
-                        r'open\s+this\s+url', r'device\s+code',
+                        r'claude\s+auth\s+login',
+                        r'codex\s+login\b',
+                        r'not\s+logged\s+in.*run\s',
+                        r'please\s+(run|execute).*login',
+                        r'session\s+expired.*re-?auth',
+                        r'open\s+this\s+url\s+in\s+your\s+browser',
+                        r'enter\s+(the\s+)?code\s+shown',
+                        r'device\s+code.*https?://',
                     ]
                     for pat in auth_patterns:
                         if re.search(pat, clean, re.IGNORECASE):
