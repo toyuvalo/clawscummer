@@ -470,6 +470,42 @@ class Api:
         except Exception as e:
             return json.dumps({"ok": False, "error": str(e)})
 
+    def import_creds(self, label: str, cli_type: str, creds_json: str) -> str:
+        """Import credentials from a JSON string (user pastes or picks a file)."""
+        try:
+            creds = json.loads(creds_json)
+            acc = self._am.add_account(label, cli_type)
+            # Save creds to per-account file
+            from pathlib import Path
+            creds_dir = Path.home() / ".clawscummer" / "creds"
+            creds_dir.mkdir(parents=True, exist_ok=True)
+            (creds_dir / f"{acc.id}.json").write_text(
+                json.dumps(creds, indent=2), encoding="utf-8"
+            )
+            return json.dumps({"ok": True, "id": acc.id, "label": acc.label})
+        except json.JSONDecodeError:
+            return json.dumps({"ok": False, "error": "Invalid JSON"})
+        except Exception as e:
+            return json.dumps({"ok": False, "error": str(e)})
+
+    def pick_creds_file(self) -> str:
+        """Open a file picker for credentials JSON file."""
+        import webview
+        if self._window:
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                file_types=('JSON files (*.json)',),
+            )
+            if result and len(result) > 0:
+                try:
+                    content = open(result[0], 'r', encoding='utf-8').read()
+                    # Validate it's JSON
+                    json.loads(content)
+                    return json.dumps({"ok": True, "content": content, "path": result[0]})
+                except Exception as e:
+                    return json.dumps({"ok": False, "error": str(e)})
+        return json.dumps({"ok": False, "error": "No file selected"})
+
     def kill_session(self) -> str:
         self._terminal.kill_session()
         return json.dumps({"ok": True})

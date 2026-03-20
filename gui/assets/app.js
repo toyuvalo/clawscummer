@@ -180,6 +180,27 @@ function setupEventListeners() {
   document.getElementById('modal-name-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') modalNameSubmit();
   });
+  // Auth: Login here (opens browser console)
+  document.getElementById('modal-auth-login').addEventListener('click', async () => {
+    const result = JSON.parse(await pywebview.api.run_auth(modalCliType));
+    if (!result.ok) { showModalStatus(result.error || 'Auth failed'); return; }
+    document.getElementById('modal-auth-status').textContent = 'Login window opened. Complete auth there, then click Done.';
+    document.getElementById('modal-auth-status').classList.remove('hidden');
+    document.getElementById('modal-auth-done').classList.remove('hidden');
+  });
+
+  // Auth: Import credentials file
+  document.getElementById('modal-auth-import').addEventListener('click', async () => {
+    const fileResult = JSON.parse(await pywebview.api.pick_creds_file());
+    if (!fileResult.ok) { showModalStatus(fileResult.error || 'No file selected'); return; }
+    const importResult = JSON.parse(await pywebview.api.import_creds(modalAccountName, modalCliType, fileResult.content));
+    if (!importResult.ok) { showModalStatus(importResult.error || 'Import failed'); return; }
+    showModalStatus(`Account "${importResult.label}" imported!`);
+    await loadAccounts();
+    setTimeout(hideModal, 1000);
+  });
+
+  // Auth: Done — save account after login
   document.getElementById('modal-auth-done').addEventListener('click', async () => {
     const result = JSON.parse(await pywebview.api.add_account(modalAccountName, modalCliType));
     if (!result.ok) { showModalStatus(result.error || 'Failed to add account'); return; }
