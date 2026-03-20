@@ -1,106 +1,62 @@
 <h1 align="center">ClawsCummer</h1>
 
-<p align="center">
-  <img src="clawscummer_thumb.png" width="100" alt="ClawsCummer TUI" />
-</p>
-
-**Multi-account Claude & Gemini session manager.** Seamlessly switch accounts on rate limit, browse past conversations, and pick up exactly where you left off.
+<p align="center">Multi-account Claude &amp; Gemini session manager. Hit a rate limit and it rotates to the next account instantly — no interruption, no context loss.</p>
 
 ---
+
+When you're running long autonomous coding sessions, rate limits kill flow. ClawsCummer treats your collection of Claude and Gemini accounts as a pool, rotates between them automatically the moment one is hit, and preserves context so the incoming session picks up exactly where the previous one left off.
 
 ## Features
 
-- **Auto account rotation** — detects rate limits and context-full errors in real time, switches to your next account, and resumes the conversation automatically
-- **Session browser** — lists all past Claude and Gemini conversations grouped by recency; resume any session in one keypress
-- **Multi-CLI support** — manages both Claude Code and Gemini CLI accounts side by side
-- **Cross-CLI handoff** — when switching between Claude and Gemini, generates a context summary so the new CLI can pick up seamlessly
-- **Plan → Execute pipeline** — Gemini drafts a step-by-step implementation plan, Claude executes it
-- **Instruction file scanner** — detects `AGENTS.md` and other instruction files in your working directory and passes them to the CLI automatically
-- **Windows GUI** — embedded terminal via pywebview + xterm.js (Windows)
+- **Auto account rotation** — monitors for rate limits in real time, switches to the next account silently, resumes the task without dropping context
+- **Session browser** — browse, search, and resume all past conversations across every account from one interface
+- **Plan → Execute pipeline** — Gemini drafts a structured step-by-step plan; Claude executes it. Two models, each doing what they're best at
+- **Cross-CLI handoff** — when switching accounts or models, auto-generates a context summary and injects it into the new session
+- **AGENTS.md scanner** — scans the working directory tree for `AGENTS.md` instruction files and injects them into the session context automatically
+- **Windows GUI** — native window via pywebview + xterm.js embedded terminal
 - **Linux / macOS TUI** — full-featured terminal UI via [Textual](https://github.com/Textualize/textual)
+- **PyInstaller binaries** — standalone `.exe` and Linux binaries, no Python install needed on the target machine
 
----
+## Install
 
-## Installation
-
-### Linux / macOS
+### From source
 
 ```bash
 git clone https://github.com/toyuvalo/clawscummer
 cd clawscummer
-bash install.sh
+bash install.sh          # Linux / macOS
+.\install.ps1            # Windows (PowerShell)
 ```
 
-Then run with:
+### Standalone binary (no Python required)
 
-```bash
-clawscummer
-```
-
-### Windows
-
-```powershell
-git clone https://github.com/toyuvalo/clawscummer
-cd clawscummer
-.\install.ps1
-```
-
-Then run with:
-
-```powershell
-clawscummer
-```
-
-Or double-click the **ClawsCummer** shortcut created on your Desktop.
-
----
-
-## Standalone Binaries
-
-Pre-built binaries for Linux, macOS, and Windows are available on the [Releases](https://github.com/toyuvalo/clawscummer/releases) page — no Python required.
+Download from [Releases](https://github.com/toyuvalo/clawscummer/releases):
 
 | Platform | File |
 |----------|------|
+| Windows  | `clawscummer-windows.exe` |
 | Linux    | `clawscummer-linux` |
 | macOS    | `clawscummer-macos` |
-| Windows  | `clawscummer-windows.exe` |
-
----
 
 ## Requirements
 
-- Python 3.8+
 - [Claude Code](https://claude.ai/code) and/or [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed and on your PATH
-- `textual`, `rich` (auto-installed on first run)
-
-Optional (Windows GUI mode):
-- `pywebview`, `pywinpty`, `websockets`
-
----
+- Python 3.8+ (if running from source)
 
 ## Adding Accounts
 
-1. Launch ClawsCummer — you'll land on the account picker
+1. Launch ClawsCummer
 2. Select **+ Add New Account**
-3. Choose **Claude** or **Gemini**
-4. For Claude: log in to your second account in a separate terminal (`claude auth logout && claude auth login`), then press Enter to save
-5. For Gemini: just give it a label — Gemini handles its own auth separately
-
-ClawsCummer stores account credentials in `~/.clawscummer/accounts.json` (restricted permissions).
-
----
+3. Choose **Claude** or **Gemini** and follow the auth prompts
+4. Credentials stored in `~/.clawscummer/accounts.json`
 
 ## Workflow Modes
-
-Press `m` on the main screen to cycle through modes:
 
 | Mode | Behaviour |
 |------|-----------|
 | `AUTO` | Launches the active account's CLI directly |
-| `PLAN>EXEC` | Gemini generates an implementation plan first; Claude executes it |
-| `MANUAL` | Same as AUTO, but disables automatic rate-limit switching |
-
----
+| `PLAN→EXEC` | Gemini plans, Claude executes |
+| `MANUAL` | AUTO with automatic rotation disabled |
 
 ## Keyboard Shortcuts
 
@@ -112,34 +68,15 @@ Press `m` on the main screen to cycle through modes:
 | `Ctrl+Shift+S` | Switch active account |
 | `q` | Quit |
 
----
-
 ## Building from Source
 
-**Linux / macOS**
 ```bash
-bash build.sh
-# → dist/clawscummer
+bash build.sh        # Linux / macOS → dist/clawscummer
+.\build.ps1          # Windows → dist\clawscummer.exe
 ```
 
-**Windows**
-```powershell
-.\build.ps1
-# → dist\clawscummer.exe
-```
-
-Binaries are built automatically for all platforms via GitHub Actions on every version tag push.
-
----
-
-## Home Assistant Integration
-
-The `ha_integration/` directory contains example YAML for controlling ClawsCummer via Home Assistant automations and Lovelace cards (useful for Tailscale-connected setups).
-
----
+Binaries are built automatically via GitHub Actions on every version tag.
 
 ## License
 
-MIT License with [Commons Clause](https://commonsclause.com/) — free to use, modify, and share. Commercial resale is not permitted.
-
-See [LICENSE](LICENSE) for full terms.
+MIT with [Commons Clause](https://commonsclause.com/) — free to use, modify, and share. Commercial resale not permitted.
