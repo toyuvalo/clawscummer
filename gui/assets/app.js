@@ -235,10 +235,13 @@ function sendChatMessage() {
   lastCleanContent = '';
   lastProcessedLen = 0;
   awaitingUserInput = false;
-  stopResponsePolling();  // Kill any old polling from previous turn
-  hideBanner();  // Dismiss auth/status banners
+  stopResponsePolling();
+  hideBanner();
   discardUntilPrompt = true;
   discardDeadline = Date.now() + 500;
+
+  // Snapshot response BEFORE sending prompt — so polling detects the NEW response
+  prePromptSnapshot();
 
   pywebview.api.pty_input(text + '\r');
 
@@ -495,23 +498,26 @@ function feedChat(data) {
   updateDebugBar();
 }
 
-// Poll conversation file every 2s for a NEW response (different from greeting)
+// Poll conversation file for a NEW response (different from pre-prompt snapshot)
 let responsePollTimer = null;
 let responseSnapshotText = '';
 
-function startResponsePolling() {
-  stopResponsePolling();
-
-  // Snapshot current response (usually the greeting) so we can detect a NEW one
+// Called BEFORE sending prompt to capture what's there now
+function prePromptSnapshot() {
   pywebview.api.get_last_response().then(raw => {
     try {
       const r = JSON.parse(raw);
       responseSnapshotText = (r.ok && r.text) ? r.text : '';
-      dbg(`POLL START snapshot: "${responseSnapshotText.slice(0, 40)}"`);
+      dbg(`SNAPSHOT: "${responseSnapshotText.slice(0, 40)}"`);
     } catch { responseSnapshotText = ''; }
   });
+}
 
-  // Poll every 1s for fast response detection
+function startResponsePolling() {
+  stopResponsePolling();
+  dbg(`POLL START (snapshot: "${responseSnapshotText.slice(0, 40)}")`);
+
+  // Poll every 1s
   responsePollTimer = setInterval(async () => {
     try {
       const result = JSON.parse(await pywebview.api.get_last_response());
@@ -834,6 +840,7 @@ async function launchNew(prompt) {
   awaitingUserInput = false;
 
   addUserMessage(prompt);
+  prePromptSnapshot();  // Snapshot before launch so polling detects the NEW response
 
   // Set BEFORE launch so feedChat receives welcome banner + prompt detection
   isTerminalActive = true;
