@@ -336,9 +336,10 @@ class TerminalManager:
                     import sys
                     print(f"[CC-PERM] Auto-approved read y/n", flush=True)
 
-                # Rule 3: ANY other permission/approval/y-n prompt → surface to UI
-                elif re.search(r'(allow|permit|approve|confirm)', recent_clean) or \
-                     re.search(r'y/n|yes/no|\(y\)', recent_clean):
+                # Rule 3: Other prompts with ACTUAL y/n choice indicator → surface to UI
+                # Only trigger if there's a real y/n prompt, not just "allow" in response text
+                elif re.search(r'y/n|yes/no|\(y\)|\[y\]', recent_clean) and \
+                     len(recent_clean.strip()) < 500:  # Actual prompts are short
                     perm_text = recent_clean.strip()[-300:]
                     self._push_status("permission_request", perm_text)
                     with self._recent_lock:

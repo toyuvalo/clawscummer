@@ -234,7 +234,9 @@ function sendChatMessage() {
   assistantBuffer = '';
   lastCleanContent = '';
   lastProcessedLen = 0;
-  awaitingUserInput = false;  // User sent a new message — start listening again
+  awaitingUserInput = false;
+  stopResponsePolling();  // Kill any old polling from previous turn
+  hideBanner();  // Dismiss auth/status banners
   discardUntilPrompt = true;
   discardDeadline = Date.now() + 500;
 
@@ -448,6 +450,7 @@ function feedChat(data) {
       dbg(`DISCARD→STREAMING spin=${hasSpinner} think=${hasThinking}`);
       discardUntilPrompt = false;
       assistantBuffer = '';
+      hideBanner();  // Dismiss any auth/status banners — CLI is working
       if (!isStreaming) startAssistantTurn();
       updateDebugBar();
     }
