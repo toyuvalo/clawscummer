@@ -104,7 +104,8 @@ class TerminalManager:
             spawn_exe = "cmd.exe"
         else:
             spawn_exe = exe
-            cmdline = " ".join(_quote(a) for a in cmd)
+            # pywinpty prepends exe path as argv[0], so cmdline is args only
+            cmdline = " ".join(_quote(a) for a in cmd[1:]) if len(cmd) > 1 else ""
 
         try:
             self._process_handle = self._pty.spawn(spawn_exe, cmdline=cmdline, cwd=cwd)
