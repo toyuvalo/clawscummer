@@ -303,47 +303,48 @@ class TerminalManager:
                 with self._recent_lock:
                     recent_clean = self._strip_ansi(self._recent_output).lower()
 
-                # Workspace trust prompts — always safe to approve
+                # === PERMISSION RULES ===
+                # 1. Workspace/directory trust in same root as cwd → auto YES
+                # 2. Read-only operations → auto YES
+                # 3. EVERYTHING ELSE (write/edit/delete/execute) → surface to UI
+
+                # Rule 1: Workspace trust
                 if not self._perm_approved and \
                    'trust' in recent_clean and ('contents' in recent_clean or 'directory' in recent_clean or 'folder' in recent_clean or 'workspace' in recent_clean):
                     self._pty.write("y\r")
-                    self._perm_approved = True  # Only prevents re-triggering trust, NOT write prompts
+                    self._perm_approved = True
                     with self._recent_lock:
                         self._recent_output = ""
                     import sys
                     print(f"[CC-PERM] Auto-approved workspace trust", flush=True)
-                # Read-only tool prompts — auto-approve (always checked, not gated by _perm_approved)
-                elif re.search(r'(allow|permit).{0,30}(read|glob|grep|search|list|view|cat)', recent_clean):
+
+                # Rule 2: Read-only tools — auto YES
+                elif re.search(r'(allow|permit).{0,40}(read|glob|grep|search|list|view|cat|ls|find)', recent_clean):
                     self._pty.write("y\r")
                     with self._recent_lock:
                         self._recent_output = ""
                     import sys
                     print(f"[CC-PERM] Auto-approved read tool", flush=True)
-                # Write/edit/execute/delete prompts — surface to UI (always checked)
-                elif re.search(r'(allow|permit|approve).{0,30}(write|edit|create|delete|execute|bash|run|install|remove)', recent_clean):
-                    perm_text = recent_clean.strip()[-300:]
-                    self._push_status("permission_request", perm_text)
-                    with self._recent_lock:
-                        self._recent_output = ""
-                    import sys
-                    print(f"[CC-PERM] Write permission → UI: {perm_text[:80]}", flush=True)
-                # Generic y/n with read/trust context — auto-approve
+
+                # Rule 2b: Generic y/n that is clearly read/trust/access
                 elif re.search(r'y/n|yes/no', recent_clean) and \
-                     re.search(r'(read|trust|parent|access|continue)', recent_clean):
+                     re.search(r'\bread\b|\btrust\b|\baccess\b|\bparent\b|\bcontinue\b', recent_clean) and \
+                     not re.search(r'\bwrite\b|\bedit\b|\bdelete\b|\bcreate\b|\bexecute\b|\binstall\b|\bremove\b|\bbash\b|\brun\b', recent_clean):
                     self._pty.write("y\r")
                     with self._recent_lock:
                         self._recent_output = ""
                     import sys
-                    print(f"[CC-PERM] Auto-approved read/trust y/n", flush=True)
-                # Generic y/n with write context — surface to UI
-                elif re.search(r'y/n|yes/no', recent_clean) and \
-                     re.search(r'(write|edit|delete|execute|overwrite|remove)', recent_clean):
+                    print(f"[CC-PERM] Auto-approved read y/n", flush=True)
+
+                # Rule 3: ANY other permission/approval/y-n prompt → surface to UI
+                elif re.search(r'(allow|permit|approve|confirm)', recent_clean) or \
+                     re.search(r'y/n|yes/no|\(y\)', recent_clean):
                     perm_text = recent_clean.strip()[-300:]
                     self._push_status("permission_request", perm_text)
                     with self._recent_lock:
                         self._recent_output = ""
                     import sys
-                    print(f"[CC-PERM] Write y/n → UI: {perm_text[:80]}", flush=True)
+                    print(f"[CC-PERM] → UI for approval: {perm_text[:80]}", flush=True)
 
                 # Auth detection — check if CLI is prompting for login
                 if not self._auth_detected:

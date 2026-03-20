@@ -195,13 +195,13 @@ class Api:
             if action == "resume":
                 cmd.append("--continue")
         elif cli_type == "codex":
-            # on-failure: auto-approve reads, prompt on write failures
-            cmd = ["codex", "-a", "on-failure"]
+            # untrusted: prompt for everything except reads
+            cmd = ["codex", "-a", "untrusted"]
             if action == "resume":
                 cmd = ["codex", "resume", "--last"]
         else:  # gemini
-            # auto_edit: auto-approve reads + edits, prompt for dangerous ops
-            cmd = ["gemini", "--approval-mode", "auto_edit"]
+            # default: prompt for all tool use (reads auto-approved by our PTY detection)
+            cmd = ["gemini", "--approval-mode", "default"]
             if action == "resume":
                 cmd.extend(["--resume", "latest"])
         return cmd
