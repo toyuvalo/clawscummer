@@ -170,8 +170,9 @@ function setupEventListeners() {
       modalCliType = btn.dataset.type;
       document.getElementById('modal-step').classList.add('hidden');
       document.getElementById('modal-name').classList.remove('hidden');
+      const cliNames = {claude: 'Claude', gemini: 'Gemini', codex: 'Codex'};
       document.getElementById('modal-name-label').textContent =
-        `Name this ${modalCliType === 'claude' ? 'Claude' : 'Gemini'} account:`;
+        `Name this ${cliNames[modalCliType] || modalCliType} account:`;
       document.getElementById('modal-name-input').focus();
     });
   });
@@ -943,21 +944,35 @@ async function modalNameSubmit() {
   const name = document.getElementById('modal-name-input').value.trim();
   if (!name) return;
   modalAccountName = name;
-  if (modalCliType === 'claude') {
-    document.getElementById('modal-name').classList.add('hidden');
-    document.getElementById('modal-auth').classList.remove('hidden');
-    document.querySelector('#modal-auth code').textContent = 'claude auth logout && claude auth login';
-  } else if (modalCliType === 'codex') {
-    document.getElementById('modal-name').classList.add('hidden');
-    document.getElementById('modal-auth').classList.remove('hidden');
-    document.querySelector('#modal-auth code').textContent = 'codex login';
-  } else {
-    // gemini — no separate auth step needed
+
+  if (modalCliType === 'gemini') {
+    // Gemini uses browser OAuth — just add the account
     const result = JSON.parse(await pywebview.api.add_account(name, 'gemini'));
     if (!result.ok) { showModalStatus(result.error || 'Failed'); return; }
     showModalStatus('Gemini account added!');
     await loadAccounts();
     setTimeout(hideModal, 1200);
+    return;
+  }
+
+  // Claude / Codex — run auth in the embedded terminal
+  document.getElementById('modal-name').classList.add('hidden');
+  document.getElementById('modal-auth').classList.remove('hidden');
+
+  const cliName = modalCliType === 'claude' ? 'Claude' : 'Codex';
+  document.querySelector('#modal-auth p').textContent = `Logging in to ${cliName}. Complete the auth flow in the terminal below.`;
+  document.querySelector('#modal-auth code').textContent = `Running: ${modalCliType === 'claude' ? 'claude auth login' : 'codex login'}`;
+
+  // Init terminal if needed and show it
+  initTerminal();
+  if (!terminalVisible) toggleTerminal();
+  if (term) term.clear();
+
+  // Run auth command in the PTY
+  const result = JSON.parse(await pywebview.api.run_auth(modalCliType));
+  if (!result.ok) {
+    showModalStatus(result.error || 'Auth failed');
+    return;
   }
 }
 function showModalStatus(text) {

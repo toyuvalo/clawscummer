@@ -445,6 +445,23 @@ class Api:
 
         return None
 
+    def run_auth(self, cli_type: str) -> str:
+        """Run auth command in the PTY for the given CLI type."""
+        self._terminal.kill_session()
+        time.sleep(0.3)
+
+        if cli_type == "claude":
+            cmd = ["claude", "auth", "login"]
+        elif cli_type == "codex":
+            cmd = ["codex", "login"]
+        elif cli_type == "gemini":
+            cmd = ["gemini", "/auth"]
+        else:
+            return json.dumps({"ok": False, "error": f"Unknown CLI type: {cli_type}"})
+
+        self._terminal.start_session(cmd, self._current_cwd)
+        return json.dumps({"ok": True, "cmd": " ".join(cmd)})
+
     def kill_session(self) -> str:
         self._terminal.kill_session()
         return json.dumps({"ok": True})
