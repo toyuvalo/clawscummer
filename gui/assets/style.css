@@ -502,6 +502,23 @@ body {
   color: #52525b;
 }
 
+.thinking-meta {
+  font-size: 11px;
+  color: #52525b;
+  margin-left: 4px;
+}
+.thinking-time {
+  color: #818cf8;
+  font-variant-numeric: tabular-nums;
+}
+.thinking-effort {
+  color: #a78bfa;
+}
+.thinking-tools {
+  color: #6b7280;
+  font-style: italic;
+}
+
 .thinking-dots {
   display: inline-flex;
   gap: 3px;

@@ -265,12 +265,16 @@ function addSystemMessage(text) {
 }
 
 // ── Assistant Turn (Thinking + Tools + Response) ─────────────────────────────
+let thinkingStartTime = 0;
+let thinkingTimer = null;
+
 function startAssistantTurn() {
   finalizeAssistantTurn();
   assistantBuffer = '';
   lastCleanContent = '';
   lastProcessedLen = 0;
   isStreaming = true;
+  thinkingStartTime = Date.now();
 
   const msgs = document.getElementById('chat-messages');
 
@@ -278,11 +282,32 @@ function startAssistantTurn() {
   currentResponseWrap = document.createElement('div');
   currentResponseWrap.className = 'assistant-turn';
 
-  // Thinking indicator (collapsible)
+  // Thinking indicator (collapsible) — shows verb, elapsed time, effort
   currentThinkingEl = document.createElement('details');
   currentThinkingEl.className = 'thinking-block';
-  currentThinkingEl.innerHTML = `<summary><span class="thinking-indicator"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-verb">Thinking</span>...</span></summary><div class="thinking-content"></div>`;
+  currentThinkingEl.innerHTML = `
+    <summary>
+      <span class="thinking-indicator">
+        <span class="thinking-dots"><span></span><span></span><span></span></span>
+        <span class="thinking-verb">Thinking</span>...
+        <span class="thinking-meta">
+          <span class="thinking-time">0s</span>
+          <span class="thinking-effort"></span>
+          <span class="thinking-tools"></span>
+        </span>
+      </span>
+    </summary>
+    <div class="thinking-content"></div>`;
   currentResponseWrap.appendChild(currentThinkingEl);
+
+  // Update elapsed time every second
+  thinkingTimer = setInterval(() => {
+    if (currentThinkingEl) {
+      const elapsed = Math.round((Date.now() - thinkingStartTime) / 1000);
+      const timeEl = currentThinkingEl.querySelector('.thinking-time');
+      if (timeEl) timeEl.textContent = `${elapsed}s`;
+    }
+  }, 1000);
 
   // Tool use section (hidden until tools detected)
   currentToolsEl = document.createElement('div');
@@ -325,7 +350,8 @@ function finalizeThinking() {
     const thinkingContent = currentThinkingEl.querySelector('.thinking-content');
     const hasContent = thinkingContent && thinkingContent.textContent.trim();
     if (hasContent) {
-      summary.innerHTML = '<span class="thinking-indicator thinking-done">Thought</span>';
+      const elapsed = thinkingStartTime ? Math.round((Date.now() - thinkingStartTime) / 1000) : 0;
+      summary.innerHTML = `<span class="thinking-indicator thinking-done">Thought for ${elapsed}s</span>`;
     } else {
       // No thinking content — remove the block entirely
       currentThinkingEl.remove();
@@ -371,6 +397,7 @@ function finalizeAssistantTurn() {
   lastProcessedLen = 0;
   isStreaming = false;
   if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+  if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null; }
   stopResponsePolling();
 }
 
@@ -436,11 +463,33 @@ function feedChat(data) {
     startResponsePolling();  // Begin polling conversation file for new response
   }
 
-  // Update thinking verb to match Claude's current thinking word
+  // Update thinking verb
   const thinkMatch = detect.match(/(Slithering|Razzmatazzing|Deliberating|Honking|Thinking|Processing|Working)/i);
   if (thinkMatch && currentThinkingEl) {
     const verb = currentThinkingEl.querySelector('.thinking-verb');
     if (verb) verb.textContent = thinkMatch[1];
+  }
+
+  // Update effort level (Claude: "medium · /effort", Codex effort flags)
+  const effortMatch = detect.match(/(low|medium|high)\s*[·.]\s*\/?effort/i) ||
+                      detect.match(/effort[:\s]*(low|medium|high)/i);
+  if (effortMatch && currentThinkingEl) {
+    const effortEl = currentThinkingEl.querySelector('.thinking-effort');
+    if (effortEl) effortEl.textContent = `· ${effortMatch[1]} effort`;
+  }
+
+  // Update tool activity (Read, Write, Glob, etc.)
+  const toolMatch = detect.match(/(Reading|Writing|Editing|Globbing|Grepping|Searching|Running)\s+.{0,30}/i);
+  if (toolMatch && currentThinkingEl) {
+    const toolsEl = currentThinkingEl.querySelector('.thinking-tools');
+    if (toolsEl) toolsEl.textContent = `· ${toolMatch[0].slice(0, 40)}`;
+  }
+
+  // Token count (if visible)
+  const tokenMatch = detect.match(/(\d+[,.]?\d*)\s*tokens?\s*(used|remaining|in|out)/i);
+  if (tokenMatch && currentThinkingEl) {
+    const content = currentThinkingEl.querySelector('.thinking-content');
+    if (content) content.textContent = `${tokenMatch[1]} tokens ${tokenMatch[2]}`;
   }
 
   updateDebugBar();
