@@ -960,15 +960,10 @@ async function modalNameSubmit() {
   document.getElementById('modal-auth').classList.remove('hidden');
 
   const cliName = modalCliType === 'claude' ? 'Claude' : 'Codex';
-  document.querySelector('#modal-auth p').textContent = `Logging in to ${cliName}. Complete the auth flow in the terminal below.`;
-  document.querySelector('#modal-auth code').textContent = `Running: ${modalCliType === 'claude' ? 'claude auth login' : 'codex login'}`;
+  document.querySelector('#modal-auth p').textContent = `A login window has opened. Complete the auth flow there.`;
+  document.querySelector('#modal-auth code').textContent = `${modalCliType === 'claude' ? 'claude auth login' : 'codex login'}`;
 
-  // Init terminal if needed and show it
-  initTerminal();
-  if (!terminalVisible) toggleTerminal();
-  if (term) term.clear();
-
-  // Run auth command in the PTY
+  // Run auth in a separate console window (OAuth needs a real terminal)
   const result = JSON.parse(await pywebview.api.run_auth(modalCliType));
   if (!result.ok) {
     showModalStatus(result.error || 'Auth failed');

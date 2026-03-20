@@ -446,9 +446,9 @@ class Api:
         return None
 
     def run_auth(self, cli_type: str) -> str:
-        """Run auth command in the PTY for the given CLI type."""
-        self._terminal.kill_session()
-        time.sleep(0.3)
+        """Run auth command — launches in a separate visible console window
+        so OAuth redirect works properly (PTY can mangle callback URLs)."""
+        import subprocess
 
         if cli_type == "claude":
             cmd = ["claude", "auth", "login"]
@@ -459,8 +459,16 @@ class Api:
         else:
             return json.dumps({"ok": False, "error": f"Unknown CLI type: {cli_type}"})
 
-        self._terminal.start_session(cmd, self._current_cwd)
-        return json.dumps({"ok": True, "cmd": " ".join(cmd)})
+        try:
+            # Open in a new visible console window so OAuth redirect works
+            subprocess.Popen(
+                cmd,
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+                cwd=self._current_cwd,
+            )
+            return json.dumps({"ok": True, "cmd": " ".join(cmd)})
+        except Exception as e:
+            return json.dumps({"ok": False, "error": str(e)})
 
     def kill_session(self) -> str:
         self._terminal.kill_session()
