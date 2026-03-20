@@ -258,7 +258,8 @@ class TerminalManager:
                     # Comprehensive ANSI strip for prompt detection
                     clean = self._strip_ansi(self._recent_output)
                     if re.search(r'❯', clean) or re.search(r'\?\s*for\s*shortcuts', clean) or \
-                       re.search(r'^\s*>\s*$', clean, re.MULTILINE):  # Codex prompt
+                       re.search(r'^\s*>\s*$', clean, re.MULTILINE) or \
+                       re.search(r'◇', clean):  # Claude ❯, Gemini ◇/?shortcuts, Codex >
                         if not self._prompt_event.is_set():
                             import sys
                             print(f"[CC-PROMPT] Detected CLI prompt ready", flush=True)
@@ -346,19 +347,21 @@ class TerminalManager:
 
                 # Auth detection — check if CLI is prompting for login
                 if not self._auth_detected:
-                    # Very specific patterns to avoid false positives from prompt text
+                    # Very specific patterns — avoid matching "Waiting for authentication" (Gemini OAuth refresh)
                     auth_patterns = [
                         r'claude\s+auth\s+login',
                         r'codex\s+login\b',
                         r'not\s+logged\s+in.*run\s',
                         r'please\s+(run|execute).*login',
                         r'session\s+expired.*re-?auth',
-                        r'open\s+this\s+url\s+in\s+your\s+browser',
                         r'enter\s+(the\s+)?code\s+shown',
                         r'device\s+code.*https?://',
+                        r'visit\s+https?://.*to\s+(sign|log)\s+in',
                     ]
+                    # Exclude Gemini's normal "Waiting for authentication..." spinner
+                    is_gemini_refresh = re.search(r'waiting\s+for\s+authentication', clean, re.IGNORECASE)
                     for pat in auth_patterns:
-                        if re.search(pat, clean, re.IGNORECASE):
+                        if re.search(pat, clean, re.IGNORECASE) and not is_gemini_refresh:
                             self._auth_detected = True
                             self._push_status("auth_required",
                                 f"CLI needs authentication. Check the terminal panel.")

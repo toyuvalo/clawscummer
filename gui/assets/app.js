@@ -419,7 +419,7 @@ function feedChat(data) {
   // Phase 1: Wait for CLI ready (❯ prompt)
   if (suppressUntilReady) {
     const allDetect = stripAnsiForDetection(assistantBuffer);
-    const hasPrompt = /❯/.test(allDetect) || /\?\s*for\s*shortcuts/.test(allDetect);
+    const hasPrompt = /❯/.test(allDetect) || /\?\s*for\s*shortcuts/.test(allDetect) || /◇/.test(allDetect);
     const timedOut = suppressStartTime > 0 && (Date.now() - suppressStartTime > 15000);
 
     if (hasPrompt || timedOut) {
@@ -442,7 +442,7 @@ function feedChat(data) {
   if (discardUntilPrompt) {
     const timedOut = Date.now() > discardDeadline;
     const hasSpinner = /[✢✶✻✽●◐◑◒◓⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/.test(detect);
-    const hasThinking = /lithering|azzmatazz|eliberat|onking|hinking|rocessing/i.test(detect);
+    const hasThinking = /lithering|azzmatazz|eliberat|onking|hinking|rocessing|nitializ|enerating|nalyzing|easoning|nchanting/i.test(detect);
 
     if (timedOut || hasSpinner || hasThinking) {
       dbg(`DISCARD→STREAMING spin=${hasSpinner} think=${hasThinking}`);
@@ -461,7 +461,7 @@ function feedChat(data) {
   }
 
   // Update thinking verb
-  const thinkMatch = detect.match(/(Slithering|Razzmatazzing|Deliberating|Honking|Thinking|Processing|Working)/i);
+  const thinkMatch = detect.match(/(Slithering|Razzmatazzing|Deliberating|Honking|Enchanting|Thinking|Processing|Working|Initializing|Generating|Analyzing|Searching|Reasoning)/i);
   if (thinkMatch && currentThinkingEl) {
     const verb = currentThinkingEl.querySelector('.thinking-verb');
     if (verb) verb.textContent = thinkMatch[1];
