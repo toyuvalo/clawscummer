@@ -356,6 +356,76 @@ class Api:
         self._terminal.notify_switch_done("Dismissed. Session continues.")
         return json.dumps({"ok": True})
 
+    def get_response_for_prompt(self, prompt_text: str) -> str:
+        """Get the assistant response that follows a specific user prompt."""
+        try:
+            cli_type = self._current_cli_type
+            if cli_type == "claude":
+                text = self._read_response_for_prompt(prompt_text)
+            else:
+                text = self._read_last_claude_response()  # fallback for gemini/codex
+
+            if text:
+                return json.dumps({"ok": True, "text": text})
+            return json.dumps({"ok": False, "error": "No response yet"})
+        except Exception as e:
+            return json.dumps({"ok": False, "error": str(e)})
+
+    def _read_response_for_prompt(self, prompt_text: str) -> Optional[str]:
+        """Find the assistant response that follows a specific user prompt."""
+        from pathlib import Path
+        projects_dir = Path.home() / ".claude" / "projects"
+        if not projects_dir.exists():
+            return None
+
+        # Find project dir — check ALL dirs, use most recently modified
+        best_dir = None
+        best_time = 0
+        for proj in projects_dir.iterdir():
+            if not proj.is_dir():
+                continue
+            try:
+                mt = proj.stat().st_mtime
+                if mt > best_time:
+                    best_time = mt
+                    best_dir = proj
+            except Exception:
+                pass
+        if not best_dir:
+            return None
+
+        # Find newest .jsonl after session start
+        jsonl_files = list(best_dir.glob("*.jsonl"))
+        if not jsonl_files:
+            return None
+        session_files = [f for f in jsonl_files if f.stat().st_mtime >= self._session_start_time - 5]
+        newest = max(session_files or jsonl_files, key=lambda f: f.stat().st_mtime)
+
+        # Read messages
+        messages = []
+        for line in newest.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                if obj.get("type") in ("user", "assistant"):
+                    content = obj.get("message", {}).get("content", "")
+                    text = ContextExtractor._extract_text(content)
+                    if text:
+                        messages.append({"role": obj["type"], "text": text})
+            except Exception:
+                continue
+
+        # Find the response that follows our specific prompt (substring match)
+        prompt_clean = prompt_text.strip()[:40].lower()
+        for i in range(len(messages) - 1, 0, -1):
+            if messages[i]["role"] == "assistant" and messages[i - 1]["role"] == "user":
+                if prompt_clean in messages[i - 1]["text"].lower():
+                    return messages[i]["text"]
+
+        return None
+
     def get_last_response(self) -> str:
         """Read the last assistant message from Claude's conversation file.
         Called from JS when a turn completes — gives clean text without Ink rendering artifacts.

@@ -26,6 +26,7 @@ let discardUntilPrompt = false;  // Discard stale output after user sends new ms
 let discardDeadline = 0;         // Timeout for discard phase
 let autoPromptPending = false;   // True when an auto-prompt will be injected after CLI ready
 let awaitingUserInput = false;   // True after turn completes — ignore stale terminal output
+let currentPromptText = '';      // The prompt we sent — used to match response
 let lastProcessedLen = 0;        // #10 fix: incremental processing
 const MAX_CHAT_MESSAGES = 500;   // #10 fix: DOM cap
 
@@ -155,8 +156,19 @@ async function loadSessions() {
 // ── Event Listeners ──────────────────────────────────────────────────────────
 function setupEventListeners() {
   document.getElementById('account-selector').addEventListener('change', async (e) => {
-    await pywebview.api.switch_account(e.target.value);
+    const result = JSON.parse(await pywebview.api.switch_account(e.target.value));
     updateCliBadge();
+    if (result.ok && isTerminalActive) {
+      // Kill current session and go back to launch screen with new account
+      await pywebview.api.kill_session();
+      finalizeAssistantTurn();
+      stopResponsePolling();
+      isTerminalActive = false;
+      awaitingUserInput = false;
+      addSystemMessage(`Switched to ${result.label} (${result.cli_type})`);
+      showLaunchScreen();
+      await loadSessions();
+    }
   });
   document.getElementById('mode-selector').addEventListener('change', async (e) => {
     await pywebview.api.set_workflow_mode(e.target.value);
@@ -262,9 +274,7 @@ function sendChatMessage() {
   discardUntilPrompt = true;
   discardDeadline = Date.now() + 500;
 
-  // Snapshot response BEFORE sending prompt — so polling detects the NEW response
-  prePromptSnapshot();
-
+  currentPromptText = text;
   pywebview.api.pty_input(text + '\r');
 
   input.value = '';
@@ -520,31 +530,19 @@ function feedChat(data) {
   updateDebugBar();
 }
 
-// Poll conversation file for a NEW response (different from pre-prompt snapshot)
+// Poll conversation file for the response matching our specific prompt
 let responsePollTimer = null;
-let responseSnapshotText = '';
-
-// Called BEFORE sending prompt to capture what's there now
-function prePromptSnapshot() {
-  pywebview.api.get_last_response().then(raw => {
-    try {
-      const r = JSON.parse(raw);
-      responseSnapshotText = (r.ok && r.text) ? r.text : '';
-      dbg(`SNAPSHOT: "${responseSnapshotText.slice(0, 40)}"`);
-    } catch { responseSnapshotText = ''; }
-  });
-}
 
 function startResponsePolling() {
   stopResponsePolling();
-  dbg(`POLL START (snapshot: "${responseSnapshotText.slice(0, 40)}")`);
+  dbg(`POLL START for prompt: "${currentPromptText.slice(0, 40)}"`);
 
-  // Poll every 1s
+  // Poll every 1s — looks for response that follows our specific prompt
   responsePollTimer = setInterval(async () => {
     try {
-      const result = JSON.parse(await pywebview.api.get_last_response());
-      if (result.ok && result.text && result.text !== responseSnapshotText) {
-        dbg(`POLL HIT: new response (${result.text.length} chars)`);
+      const result = JSON.parse(await pywebview.api.get_response_for_prompt(currentPromptText));
+      if (result.ok && result.text) {
+        dbg(`POLL HIT: response (${result.text.length} chars)`);
         stopResponsePolling();
         displayCleanResponse(result.text);
       }
@@ -862,7 +860,7 @@ async function launchNew(prompt) {
   awaitingUserInput = false;
 
   addUserMessage(prompt);
-  prePromptSnapshot();  // Snapshot before launch so polling detects the NEW response
+  currentPromptText = prompt;
 
   // Set BEFORE launch so feedChat receives welcome banner + prompt detection
   isTerminalActive = true;
