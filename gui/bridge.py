@@ -190,15 +190,18 @@ class Api:
     def _build_cmd(self, cli_type: str, action: str, prompt: str = "",
                    md_hint: str = "") -> list[str]:
         if cli_type == "claude":
-            cmd = ["claude", "--dangerously-skip-permissions"]
+            # Pre-approve read tools only — writes still prompt
+            cmd = ["claude", "--allowedTools", "Read,Glob,Grep,Bash(git:*)"]
             if action == "resume":
                 cmd.append("--continue")
         elif cli_type == "codex":
-            cmd = ["codex", "--full-auto"]
+            # on-failure: auto-approve reads, prompt on write failures
+            cmd = ["codex", "-a", "on-failure"]
             if action == "resume":
                 cmd = ["codex", "resume", "--last"]
         else:  # gemini
-            cmd = ["gemini", "-y"]
+            # auto_edit: auto-approve reads + edits, prompt for dangerous ops
+            cmd = ["gemini", "--approval-mode", "auto_edit"]
             if action == "resume":
                 cmd.extend(["--resume", "latest"])
         return cmd
