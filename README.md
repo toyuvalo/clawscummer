@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="clawscummer_thumb.png" alt="ClawsCummer" width="200">
+</p>
+
 <h1 align="center">ClawsCummer</h1>
 
 <p align="center">Multi-account Claude &amp; Gemini session manager. Hit a rate limit and it rotates to the next account instantly — no interruption, no context loss.</p>
@@ -13,6 +17,7 @@ When you're running long autonomous coding sessions, rate limits kill flow. Claw
 - **Plan → Execute pipeline** — Gemini drafts a structured step-by-step plan; Claude executes it. Two models, each doing what they're best at
 - **Cross-CLI handoff** — when switching accounts or models, auto-generates a context summary and injects it into the new session
 - **AGENTS.md scanner** — scans the working directory tree for `AGENTS.md` instruction files and injects them into the session context automatically
+- **Home Assistant integration** — optional `ha_integration/` module syncs session state and agent activity to HA sensors for dashboards and automations
 - **Windows GUI** — native window via pywebview + xterm.js embedded terminal
 - **Linux / macOS TUI** — full-featured terminal UI via [Textual](https://github.com/Textualize/textual)
 - **PyInstaller binaries** — standalone `.exe` and Linux binaries, no Python install needed on the target machine
@@ -49,6 +54,10 @@ Download from [Releases](https://github.com/toyuvalo/clawscummer/releases):
 2. Select **+ Add New Account**
 3. Choose **Claude** or **Gemini** and follow the auth prompts
 4. Credentials stored in `~/.clawscummer/accounts.json`
+
+## Configuration
+
+Copy `secrets.json.example` to `secrets.json` and fill in any optional API keys or HA connection details before first launch.
 
 ## Workflow Modes
 
