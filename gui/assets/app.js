@@ -942,6 +942,9 @@ function showModal() {
   document.getElementById('modal-step').classList.remove('hidden');
   document.getElementById('modal-name').classList.add('hidden');
   document.getElementById('modal-auth').classList.add('hidden');
+  document.getElementById('modal-auth-login').classList.remove('hidden');
+  document.getElementById('modal-auth-done').classList.add('hidden');
+  document.getElementById('modal-auth-status').classList.add('hidden');
   document.getElementById('modal-status').classList.add('hidden');
   document.getElementById('modal-name-input').value = '';
   document.getElementById('modal-overlay').classList.remove('hidden');
@@ -970,6 +973,9 @@ async function modalNameSubmit() {
   document.querySelector('#modal-auth p').textContent = `A login window has opened. Complete the auth flow there.`;
   const cmdEl = document.getElementById('modal-auth-cmd');
   if (cmdEl) cmdEl.textContent = modalCliType === 'claude' ? 'claude auth login' : 'codex login';
+  // Hide "Login Here" — auth opens automatically; it would spawn a duplicate window
+  document.getElementById('modal-auth-login').classList.add('hidden');
+  document.getElementById('modal-auth-import').style.marginTop = '6px';
 
   // Run auth in a separate console window (OAuth needs a real terminal)
   const result = JSON.parse(await pywebview.api.run_auth(modalCliType));
@@ -977,6 +983,10 @@ async function modalNameSubmit() {
     showModalStatus(result.error || 'Auth failed');
     return;
   }
+  // Show Done button so user can save after completing auth in the console
+  document.getElementById('modal-auth-status').textContent = 'Complete login in the window that opened, then click Done.';
+  document.getElementById('modal-auth-status').classList.remove('hidden');
+  document.getElementById('modal-auth-done').classList.remove('hidden');
 }
 function showModalStatus(text) {
   const el = document.getElementById('modal-status');
