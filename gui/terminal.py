@@ -47,6 +47,7 @@ class TerminalManager:
         self._debug_log = None
         self._auth_detected = False  # Prevent repeated auth notifications
         self._perm_approved = False  # Prevent repeated permission auto-approvals
+        self._gemini_init_detected = False  # One-shot: fire prompt_event 4s after Gemini init spinner
         self._output_callbacks: list = []  # Called with raw PTY text (for web server)
         self._notify_callbacks: list = []  # Called with (event, text) (for web server)
 
@@ -162,6 +163,7 @@ class TerminalManager:
         self._has_output = False
         self._auth_detected = False
         self._perm_approved = False
+        self._gemini_init_detected = False
         self._prompt_event.clear()
         with self._recent_lock:
             self._recent_output = ""
@@ -278,6 +280,21 @@ class TerminalManager:
                             import sys
                             print(f"[CC-PROMPT] Detected CLI prompt ready", flush=True)
                         self._prompt_event.set()
+
+                # Gemini: ⠋ Initializing... appears before the > prompt, which is
+                # rendered via cursor positioning and never appears as a clean line.
+                # Schedule prompt_event 4s after first seeing the init spinner.
+                if not self._gemini_init_detected and '⠋ Initializing' in data:
+                    self._gemini_init_detected = True
+                    import sys
+                    print(f"[CC-PROMPT] Gemini init detected — firing prompt event in 4s", flush=True)
+                    def _fire_delayed():
+                        time.sleep(4)
+                        if self._alive:
+                            self._prompt_event.set()
+                            import sys
+                            print(f"[CC-PROMPT] Gemini prompt event fired (delayed)", flush=True)
+                    threading.Thread(target=_fire_delayed, daemon=True, name="GeminiInit").start()
 
                 # Debug log raw output
                 if self._debug_log:

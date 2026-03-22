@@ -457,17 +457,19 @@ function feedChat(data) {
   if (suppressUntilReady) {
     const allDetect = stripAnsiForDetection(assistantBuffer);
     const hasPrompt = /❯/.test(allDetect) || /\?\s*for\s*shortcuts/.test(allDetect) || /◇/.test(allDetect)
-                   || /(?:^|\n)\s*>\s*(?:\n|$)/.test(allDetect);  // Gemini > prompt
+                   || /(?:^|\n)\s*>\s*(?:\n|$)/.test(allDetect);  // Gemini > prompt (newline-terminated)
+    const hasGeminiInit = /⠋\s*Initializing/i.test(allDetect);   // Gemini init spinner = prompt coming soon
     const timedOut = suppressStartTime > 0 && (Date.now() - suppressStartTime > 15000);
 
-    if (hasPrompt || timedOut) {
-      dbg(`SUPPRESS→OFF prompt=${hasPrompt} timeout=${timedOut}`);
+    if (hasPrompt || hasGeminiInit || timedOut) {
+      dbg(`SUPPRESS→OFF prompt=${hasPrompt} geminiInit=${hasGeminiInit} timeout=${timedOut}`);
       cliReady = true;
       suppressUntilReady = false;
       assistantBuffer = '';
       if (autoPromptPending) {
         discardUntilPrompt = true;
-        discardDeadline = Date.now() + 3000;
+        // Gemini init: prompt won't be injected for ~5s (4s delay + 1s wait) — give 8s
+        discardDeadline = Date.now() + (hasGeminiInit ? 8000 : 3000);
         autoPromptPending = false;
       }
       updateDebugBar();
