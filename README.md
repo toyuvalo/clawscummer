@@ -6,6 +6,8 @@
 
 <p align="center">Multi-account Claude &amp; Gemini session manager. Hit a rate limit and it rotates to the next account instantly — no interruption, no context loss.</p>
 
+<p align="center"><a href="https://webdev.dvlce.ca/clawscummer">Project page →</a></p>
+
 ---
 
 When you're running long autonomous coding sessions, rate limits kill flow. ClawsCummer treats your collection of Claude and Gemini accounts as a pool, rotates between them automatically the moment one is hit, and preserves context so the incoming session picks up exactly where the previous one left off.
@@ -85,6 +87,10 @@ bash build.sh        # Linux / macOS → dist/clawscummer
 ```
 
 Binaries are built automatically via GitHub Actions on every version tag.
+
+## Related
+
+- [webdev.dvlce.ca/clawscummer](https://webdev.dvlce.ca/clawscummer) — project page
 
 ## License
 
