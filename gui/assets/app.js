@@ -456,7 +456,8 @@ function feedChat(data) {
   // Phase 1: Wait for CLI ready (❯ prompt)
   if (suppressUntilReady) {
     const allDetect = stripAnsiForDetection(assistantBuffer);
-    const hasPrompt = /❯/.test(allDetect) || /\?\s*for\s*shortcuts/.test(allDetect) || /◇/.test(allDetect);
+    const hasPrompt = /❯/.test(allDetect) || /\?\s*for\s*shortcuts/.test(allDetect) || /◇/.test(allDetect)
+                   || /(?:^|\n)\s*>\s*(?:\n|$)/.test(allDetect);  // Gemini > prompt
     const timedOut = suppressStartTime > 0 && (Date.now() - suppressStartTime > 15000);
 
     if (hasPrompt || timedOut) {

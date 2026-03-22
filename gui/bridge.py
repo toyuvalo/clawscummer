@@ -380,8 +380,10 @@ class Api:
             cli_type = self._current_cli_type
             if cli_type == "claude":
                 text = self._read_response_for_prompt(prompt_text)
+            elif cli_type == "gemini":
+                text = self._read_gemini_response_for_prompt(prompt_text)
             else:
-                text = self._read_last_claude_response()  # fallback for gemini/codex
+                text = None  # codex: TODO SQLite reader
 
             if text:
                 return json.dumps({"ok": True, "text": text})
@@ -444,6 +446,51 @@ class Api:
 
         return None
 
+    def _read_gemini_response_for_prompt(self, prompt_text: str) -> Optional[str]:
+        """Find the Gemini response that follows a specific user prompt."""
+        from pathlib import Path
+        projects_file = Path.home() / ".gemini" / "projects.json"
+        if not projects_file.exists():
+            return None
+        try:
+            data = json.loads(projects_file.read_text(encoding="utf-8"))
+            slug = data.get("projects", {}).get(self._current_cwd.lower())
+        except Exception:
+            return None
+        if not slug:
+            return None
+
+        chats_dir = Path.home() / ".gemini" / "tmp" / slug / "chats"
+        if not chats_dir.exists():
+            return None
+
+        session_files = list(chats_dir.glob("session-*.json"))
+        if not session_files:
+            return None
+
+        # Prefer files from the current session
+        recent = [f for f in session_files if f.stat().st_mtime >= self._session_start_time - 5]
+        newest = max(recent or session_files, key=lambda f: f.stat().st_mtime)
+
+        try:
+            messages = json.loads(newest.read_text(encoding="utf-8", errors="replace")).get("messages", [])
+        except Exception:
+            return None
+
+        prompt_clean = prompt_text.strip()[:40].lower()
+        for i in range(len(messages) - 1, 0, -1):
+            msg = messages[i]
+            prev = messages[i - 1]
+            if msg.get("type") == "gemini" and prev.get("type") == "user":
+                user_content = prev.get("content", [])
+                user_text = " ".join(c.get("text", "") for c in user_content) \
+                    if isinstance(user_content, list) else str(user_content)
+                if prompt_clean in user_text.lower():
+                    content = msg.get("content", "")
+                    if isinstance(content, str) and content.strip():
+                        return content
+        return None
+
     def get_last_response(self) -> str:
         """Read the last assistant message from Claude's conversation file.
         Called from JS when a turn completes — gives clean text without Ink rendering artifacts.
@@ -452,13 +499,10 @@ class Api:
             cli_type = self._current_cli_type
             if cli_type == "claude":
                 text = self._read_last_claude_response()
+            elif cli_type == "gemini":
+                text = self._read_gemini_response_for_prompt("")  # empty = last response
             else:
-                messages = ContextExtractor.extract_gemini(max_messages=2)
                 text = None
-                for msg in reversed(messages):
-                    if msg["role"] == "assistant":
-                        text = msg["content"]
-                        break
 
             if text:
                 return json.dumps({"ok": True, "text": text})
