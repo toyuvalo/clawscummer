@@ -47,6 +47,8 @@ class TerminalManager:
         self._debug_log = None
         self._auth_detected = False  # Prevent repeated auth notifications
         self._perm_approved = False  # Prevent repeated permission auto-approvals
+        self._output_callbacks: list = []  # Called with raw PTY text (for web server)
+        self._notify_callbacks: list = []  # Called with (event, text) (for web server)
 
     def set_window(self, window):
         """Set the pywebview window for evaluate_js calls."""
@@ -200,14 +202,20 @@ class TerminalManager:
             with self._output_lock:
                 buf = self._output_buffer
                 self._output_buffer = ""
-            if buf and self._window:
-                escaped = json.dumps(buf)
-                try:
-                    self._window.evaluate_js(f"window.termWrite({escaped})")
-                except Exception:
-                    # #6 fix: Window likely destroyed — stop flushing
-                    self._alive = False
-                    break
+            if buf:
+                if self._window:
+                    escaped = json.dumps(buf)
+                    try:
+                        self._window.evaluate_js(f"window.termWrite({escaped})")
+                    except Exception:
+                        # #6 fix: Window likely destroyed — stop flushing
+                        self._alive = False
+                        break
+                for cb in list(self._output_callbacks):
+                    try:
+                        cb(buf)
+                    except Exception:
+                        pass
 
     def _push_output_immediate(self, data: str):
         """Push directly to xterm.js — for error messages, not PTY stream."""
@@ -224,6 +232,11 @@ class TerminalManager:
             msg = json.dumps({"event": event, "text": text})
             try:
                 self._window.evaluate_js(f"window.handleStatus({msg})")
+            except Exception:
+                pass
+        for cb in list(self._notify_callbacks):
+            try:
+                cb(event, text)
             except Exception:
                 pass
 
