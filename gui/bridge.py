@@ -321,9 +321,11 @@ class Api:
         try:
             md_hint = MDScanner.format_hint(MDScanner.scan(cwd))
 
+            handoff_prompt = None
             if nxt.cli_type != prev_cli_type:
                 instruction = HandoffManager.generate(messages, prev_cli_type, cwd)
-                cmd = self._build_cmd(nxt.cli_type, "new", instruction, md_hint)
+                handoff_prompt = instruction + md_hint if instruction else None
+                cmd = self._build_cmd(nxt.cli_type, "new")
             else:
                 cmd = self._build_cmd(nxt.cli_type, "resume")
 
@@ -337,7 +339,23 @@ class Api:
                 lambda: self._handle_rate_limit(cwd, md_hint)
             )
 
+            self._session_start_time = time.time()
             self._terminal.start_session(cmd, cwd)
+
+            # Inject handoff context via PTY after CLI is ready
+            if handoff_prompt:
+                def _send_handoff():
+                    if self._terminal.wait_for_prompt(timeout=30):
+                        time.sleep(1.0)
+                        if self._terminal.is_alive():
+                            self._terminal.write(handoff_prompt)
+                            time.sleep(0.3)
+                        if self._terminal.is_alive():
+                            self._terminal.write("\r")
+                        import sys
+                        print(f"[CC-HANDOFF] Sent context ({len(handoff_prompt)} chars)", flush=True)
+                threading.Thread(target=_send_handoff, daemon=True, name="HandoffSend").start()
+
             self._terminal.notify_switch_done(
                 f"Switched to {nxt.label} ({nxt.cli_type.title()})"
             )

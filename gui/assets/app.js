@@ -272,7 +272,7 @@ function sendChatMessage() {
   stopResponsePolling();
   hideBanner();
   discardUntilPrompt = true;
-  discardDeadline = Date.now() + 500;
+  discardDeadline = Date.now() + 2000;
 
   currentPromptText = text;
   pywebview.api.pty_input(text + '\r');
@@ -486,8 +486,10 @@ function feedChat(data) {
       discardUntilPrompt = false;
       assistantBuffer = '';
       hideBanner();  // Dismiss any auth/status banners — CLI is working
-      if (!isStreaming) startAssistantTurn();
-      updateDebugBar();
+      if (!isStreaming) {
+        startAssistantTurn();
+        startResponsePolling();
+      }
     }
     return;
   }
@@ -495,7 +497,10 @@ function feedChat(data) {
   // Phase 3: Streaming — show thinking indicator, poll conversation file for response
   if (!isStreaming) {
     startAssistantTurn();
-    startResponsePolling();  // Begin polling conversation file for new response
+    startResponsePolling();
+  } else if (!responsePollTimer) {
+    // Polling wasn't started yet (e.g. phase 2 was skipped) — start it now
+    startResponsePolling();
   }
 
   // Update thinking verb
@@ -583,18 +588,8 @@ function stripAnsiForDetection(str) {
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
 }
 
-// Debug bar
-function updateDebugBar() {
-  let bar = document.getElementById('debug-bar');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'debug-bar';
-    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;color:#888;font:11px monospace;padding:2px 8px;z-index:9999;border-top:1px solid #333;';
-    document.body.appendChild(bar);
-  }
-  const phase = suppressUntilReady ? 'SUPPRESS' : discardUntilPrompt ? 'DISCARD' : isStreaming ? 'STREAMING' : 'IDLE';
-  bar.textContent = `[${phase}] calls:${feedCallCount} buf:${assistantBuffer.length} ready:${cliReady}`;
-}
+// Debug bar (no-op in production)
+function updateDebugBar() {}
 
 function parseAndRender() {
   const stripped = stripAnsi(assistantBuffer);
@@ -613,12 +608,6 @@ function parseAndRender() {
     updateAssistantContent(response);
   }
 
-  // Update debug bar with content info
-  let bar = document.getElementById('debug-bar');
-  if (bar) {
-    const phase = suppressUntilReady ? 'SUPPRESS' : discardUntilPrompt ? 'DISCARD' : isStreaming ? 'STREAMING' : 'IDLE';
-    bar.textContent = `[${phase}] buf:${assistantBuffer.length} think:${thinking.length} tools:${tools.length} resp:${response.length} stripped:${stripped.slice(0,60).replace(/\n/g,'⏎')}`;
-  }
 }
 
 // ── Output Categorization ────────────────────────────────────────────────────
@@ -978,9 +967,9 @@ async function modalNameSubmit() {
   document.getElementById('modal-name').classList.add('hidden');
   document.getElementById('modal-auth').classList.remove('hidden');
 
-  const cliName = modalCliType === 'claude' ? 'Claude' : 'Codex';
   document.querySelector('#modal-auth p').textContent = `A login window has opened. Complete the auth flow there.`;
-  document.querySelector('#modal-auth code').textContent = `${modalCliType === 'claude' ? 'claude auth login' : 'codex login'}`;
+  const cmdEl = document.getElementById('modal-auth-cmd');
+  if (cmdEl) cmdEl.textContent = modalCliType === 'claude' ? 'claude auth login' : 'codex login';
 
   // Run auth in a separate console window (OAuth needs a real terminal)
   const result = JSON.parse(await pywebview.api.run_auth(modalCliType));
