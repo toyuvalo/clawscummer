@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-ClawsCummer v2.9 — Terminal UI
-Styled launcher that hands the terminal directly to the CLI.
-No PTY injection. No browser. Just works.
+ClawsCummer v3.0 — Terminal UI
 """
 from __future__ import annotations
 
@@ -10,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Label, ListItem, ListView, Static
+from textual.widgets import Footer, Input, Label, ListItem, ListView, Static
 from textual import on
 from rich.text import Text
 
@@ -28,15 +27,18 @@ from clawscummer import (
     CLAUDE_RATE_PATTERNS, CONTEXT_FULL_PATTERNS,
 )
 
-# ── CLI helpers ───────────────────────────────────────────────────────────────
+# ── CLI helpers ────────────────────────────────────────────────────────────────
 
 CLI_ICON  = {"claude": "C", "gemini": "G", "codex": "X"}
 CLI_COLOR = {"claude": "bold bright_blue", "gemini": "bold bright_cyan", "codex": "bold bright_yellow"}
 CLI_CMDS  = {
-    "claude": {"new": ["claude"], "resume": ["claude", "--continue"]},
-    "gemini": {"new": ["gemini"], "resume": ["gemini", "--resume", "latest"]},
-    "codex":  {"new": ["codex"],  "resume": ["codex", "resume", "--last"]},
+    "claude": {"new": ["claude"],  "resume": ["claude", "--continue"]},
+    "gemini": {"new": ["gemini"],  "resume": ["gemini", "--resume", "latest"]},
+    "codex":  {"new": ["codex"],   "resume": ["codex", "resume"]},
 }
+
+# Known context windows in tokens
+CONTEXT_WINDOWS = {"claude": 200_000, "gemini": 1_000_000, "codex": 128_000}
 
 
 def _run(cmd: list[str], cwd: str) -> int:
@@ -51,7 +53,6 @@ def _run(cmd: list[str], cwd: str) -> int:
 
 
 def _was_rate_limited(cli_type: str) -> bool:
-    """Check the most recent conversation file for rate-limit / context-full errors."""
     if cli_type == "claude":
         projects = Path.home() / ".claude" / "projects"
         if not projects.exists():
@@ -80,7 +81,56 @@ def _age(ts: datetime) -> str:
     return f"{h // 24}d ago"
 
 
-# ── List item widgets ─────────────────────────────────────────────────────────
+def _estimate_ctx_used(cli_type: str) -> int:
+    """Rough token estimate (bytes/4) from most recent session file."""
+    try:
+        if cli_type == "claude":
+            projects = Path.home() / ".claude" / "projects"
+            files = sorted(projects.rglob("*.jsonl"),
+                           key=lambda f: f.stat().st_mtime, reverse=True)
+            return files[0].stat().st_size // 4 if files else 0
+        if cli_type == "gemini":
+            files = sorted((Path.home() / ".gemini" / "tmp").rglob("session_*.json"),
+                           key=lambda f: f.stat().st_mtime, reverse=True)
+            return files[0].stat().st_size // 4 if files else 0
+        if cli_type == "codex":
+            files = sorted((Path.home() / ".codex" / "sessions").rglob("*.jsonl"),
+                           key=lambda f: f.stat().st_mtime, reverse=True)
+            return files[0].stat().st_size // 4 if files else 0
+    except Exception:
+        pass
+    return 0
+
+
+def _ctx_label(cli_type: str, used: int) -> tuple[str, str]:
+    """Return (text, style) for context remaining display."""
+    total = CONTEXT_WINDOWS.get(cli_type, 0)
+    if total == 0 or used == 0:
+        return "", ""
+    remaining = max(0, total - used)
+    pct = remaining / total
+    used_k = used // 1000
+    total_k = total // 1000
+    text = f" {remaining//1000}k/{total_k}k"
+    if pct > 0.5:
+        style = "dim green"
+    elif pct > 0.2:
+        style = "dim yellow"
+    else:
+        style = "dim red"
+    return text, style
+
+
+def _copy_to_clipboard(text: str) -> bool:
+    try:
+        subprocess.run(["clip"], input=text.encode("utf-8"), check=True,
+                       capture_output=True)
+        return True
+    except Exception:
+        return False
+
+
+# ── List item widgets ──────────────────────────────────────────────────────────
 
 class SessionItem(ListItem):
     def __init__(self, conv: Conversation) -> None:
@@ -92,17 +142,19 @@ class SessionItem(ListItem):
         icon = CLI_ICON.get(self.conv.cli_type, "?")
         color = CLI_COLOR.get(self.conv.cli_type, "white")
         t.append(f" {icon} ", style=color)
-        topic = self.conv.topic[:62] if self.conv.topic else "(no topic)"
+        topic = self.conv.topic[:60] if self.conv.topic else "(no topic)"
         t.append(topic)
         t.append(f"  {_age(self.conv.last_timestamp)}", style="dim")
         yield Label(t)
 
 
 class AccountItem(ListItem):
-    def __init__(self, acc: Account, active: bool) -> None:
+    def __init__(self, acc: Account, active: bool,
+                 ctx_used: int = 0) -> None:
         super().__init__()
         self.acc = acc
         self.active = active
+        self._ctx_used = ctx_used
 
     def compose(self) -> ComposeResult:
         t = Text()
@@ -114,12 +166,17 @@ class AccountItem(ListItem):
         t.append(self.acc.label, style="bold" if self.active else "")
         if self.active:
             t.append("  active", style="dim bright_green")
+        ctx_text, ctx_style = _ctx_label(self.acc.cli_type, self._ctx_used)
+        if ctx_text:
+            t.append(ctx_text, style=ctx_style)
         yield Label(t)
 
 
-# ── Main App ──────────────────────────────────────────────────────────────────
+# ── Main App ───────────────────────────────────────────────────────────────────
 
 class ClawsCummerTUI(App):
+
+    ENABLE_COMMAND_PALETTE = False
 
     CSS = """
     Screen {
@@ -150,7 +207,7 @@ class ClawsCummerTUI(App):
     #body {
         layout: horizontal;
         height: 1fr;
-        padding: 1 2;
+        padding: 1 2 0 2;
     }
 
     #left-col {
@@ -172,7 +229,7 @@ class ClawsCummerTUI(App):
         background: #111119;
         border: solid #27273a;
         height: auto;
-        max-height: 20;
+        max-height: 18;
         scrollbar-size: 1 1;
     }
     ListView:focus {
@@ -190,6 +247,30 @@ class ClawsCummerTUI(App):
         background: #1e1e35;
     }
 
+    #prompt-bar {
+        height: 3;
+        background: #0a0a0f;
+        border-top: solid #1e1e2e;
+        padding: 0 2;
+        layout: horizontal;
+        align: left middle;
+    }
+    #prompt-label {
+        color: #4f46e5;
+        text-style: bold;
+        width: auto;
+        margin-right: 1;
+    }
+    #prompt-input {
+        background: #111119;
+        border: tall #27273a;
+        width: 1fr;
+        color: #e2e8f4;
+    }
+    #prompt-input:focus {
+        border: tall #4f46e5;
+    }
+
     #hint {
         dock: bottom;
         height: 1;
@@ -200,10 +281,11 @@ class ClawsCummerTUI(App):
     """
 
     BINDINGS = [
-        Binding("enter",   "launch_new",    "Launch",   show=True),
-        Binding("r",       "launch_resume", "Resume",   show=True),
-        Binding("tab",     "focus_next",    "Next pane",show=True),
-        Binding("ctrl+q",  "quit",          "Quit",     show=True),
+        Binding("enter",   "launch_new",       "Launch",      show=True),
+        Binding("r",       "launch_resume",    "Resume",      show=True),
+        Binding("d",       "delete_account",   "Delete acct", show=True),
+        Binding("tab",     "focus_next",       "Next pane",   show=True),
+        Binding("ctrl+q",  "quit",             "Quit",        show=True),
     ]
 
     def __init__(self) -> None:
@@ -212,12 +294,13 @@ class ClawsCummerTUI(App):
         self._scanner = ConversationScanner()
         self._sessions: list[Conversation] = []
         self._accounts: list[Account] = []
+        self._ctx_used: dict[str, int] = {}
 
-    # ── Layout ────────────────────────────────────────────────────────────────
+    # ── Layout ─────────────────────────────────────────────────────────────────
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="header"):
-            yield Static("CLAWSCUMMER  v2.9", id="logo")
+            yield Static("CLAWSCUMMER  v3.0", id="logo")
             yield Static("", id="active-badge")
         with Horizontal(id="body"):
             with Vertical(id="left-col"):
@@ -226,19 +309,35 @@ class ClawsCummerTUI(App):
             with Vertical(id="right-col"):
                 yield Static("Accounts", classes="col-title")
                 yield ListView(id="accounts-list")
-        yield Static("Enter = launch new   R = resume selected   Tab = switch pane", id="hint")
+        with Horizontal(id="prompt-bar"):
+            yield Static("Quick launch:", id="prompt-label")
+            yield Input(placeholder="type a prompt and press Enter to launch...",
+                        id="prompt-input")
+        yield Static(
+            "Enter = launch new   R = resume   D = delete account   Tab = switch pane   Ctrl+Q = quit",
+            id="hint",
+        )
         yield Footer()
 
     def on_mount(self) -> None:
         self._refresh()
         self.query_one("#sessions-list").focus()
+        # Background context estimation
+        self.set_interval(30, self._refresh_ctx)
+        threading.Thread(target=self._refresh_ctx_bg, daemon=True).start()
+
+    def _refresh_ctx_bg(self) -> None:
+        for cli in ("claude", "gemini", "codex"):
+            self._ctx_used[cli] = _estimate_ctx_used(cli)
+        self.call_from_thread(self._refresh_accounts_list)
+
+    def _refresh_ctx(self) -> None:
+        threading.Thread(target=self._refresh_ctx_bg, daemon=True).start()
 
     def _refresh(self) -> None:
         self._accounts = self._am.load_accounts()
-        active_id = self._am.get_active_id()
-        self._sessions = self._scanner.get_wip(8)
+        self._sessions = self._scanner.get_wip(12)
 
-        # Badge
         acc = self._am.get_active_account()
         if acc:
             icon = CLI_ICON.get(acc.cli_type, "?")
@@ -247,7 +346,6 @@ class ClawsCummerTUI(App):
             badge = "no account"
         self.query_one("#active-badge").update(badge)
 
-        # Sessions list
         sl = self.query_one("#sessions-list", ListView)
         sl.clear()
         if self._sessions:
@@ -256,15 +354,20 @@ class ClawsCummerTUI(App):
         else:
             sl.append(ListItem(Label(Text("  (no recent sessions)", style="dim"))))
 
-        # Accounts list
+        self._refresh_accounts_list()
+
+    def _refresh_accounts_list(self) -> None:
+        active_id = self._am.get_active_id()
         al = self.query_one("#accounts-list", ListView)
         al.clear()
         for a in self._accounts:
-            al.append(AccountItem(a, active=(a.id == active_id)))
+            used = self._ctx_used.get(a.cli_type, 0)
+            al.append(AccountItem(a, active=(a.id == active_id), ctx_used=used))
 
-    # ── Launch logic ──────────────────────────────────────────────────────────
+    # ── Launch logic ───────────────────────────────────────────────────────────
 
-    def _launch(self, action: str, conv: Conversation | None = None) -> None:
+    def _launch(self, action: str, conv: Conversation | None = None,
+                prompt: str = "") -> None:
         acc = self._am.get_active_account()
         if not acc:
             self.notify("No account selected!", severity="error")
@@ -274,22 +377,38 @@ class ClawsCummerTUI(App):
         if conv and conv.project_path and os.path.isdir(conv.project_path):
             cwd = conv.project_path
 
-        cmds = CLI_CMDS.get(acc.cli_type, {})
-        cmd = cmds.get(action, cmds.get("new", [acc.cli_type]))
+        launch_cli = conv.cli_type if (action == "resume" and conv) else acc.cli_type
+
+        if action == "resume" and conv and conv.session_id:
+            if launch_cli == "claude":
+                cmd = ["claude", "--resume", conv.session_id]
+            elif launch_cli == "gemini":
+                cmd = ["gemini", "--resume", conv.session_id]
+            elif launch_cli == "codex":
+                cmd = ["codex", "resume", conv.session_id]
+            else:
+                cmd = CLI_CMDS.get(launch_cli, {}).get("resume", [launch_cli])
+        else:
+            cmd = CLI_CMDS.get(launch_cli, {}).get("new", [launch_cli])
+
+        # If a prompt was given, copy to clipboard so user can paste it
+        clipped = False
+        if prompt:
+            clipped = _copy_to_clipboard(prompt)
 
         with self.suspend():
-            # Print a slim header so user knows what's running
             w = os.get_terminal_size().columns
-            line = "─" * w
-            icon = CLI_ICON.get(acc.cli_type, "?")
-            label = f"  {icon}  {acc.label}  ·  {acc.cli_type.title()}  ·  {cwd}"
+            line = "-" * w
+            icon = CLI_ICON.get(launch_cli, "?")
+            label = f"  {icon}  {acc.label}  ·  {launch_cli.title()}  ·  {cwd}"
             print(f"\033[38;5;61m{line}\033[0m")
             print(f"\033[38;5;61m{label}\033[0m")
+            if clipped:
+                print(f"\033[33m  Prompt copied to clipboard — paste it once the CLI is ready\033[0m")
             print(f"\033[38;5;61m{line}\033[0m\n")
 
             _run(cmd, cwd)
 
-            # Post-session: rate limit check + auto-switch offer
             if _was_rate_limited(acc.cli_type):
                 nxt = self._am.peek_next()
                 if nxt:
@@ -309,36 +428,62 @@ class ClawsCummerTUI(App):
 
         self._refresh()
 
-    # ── Actions ───────────────────────────────────────────────────────────────
+    # ── Actions ────────────────────────────────────────────────────────────────
 
     def action_launch_new(self) -> None:
+        # If prompt bar is focused, let Input handle it
+        focused = self.focused
+        if focused and focused.id == "prompt-input":
+            return
         self._launch("new")
 
     def action_launch_resume(self) -> None:
         sl = self.query_one("#sessions-list", ListView)
-        idx = sl.index
-        conv = self._sessions[idx] if idx is not None and idx < len(self._sessions) else None
+        item = sl.highlighted_child
+        conv = item.conv if isinstance(item, SessionItem) else None
         self._launch("resume", conv)
 
-    # ── Click handlers ────────────────────────────────────────────────────────
+    def action_delete_account(self) -> None:
+        al = self.query_one("#accounts-list", ListView)
+        item = al.highlighted_child
+        if not isinstance(item, AccountItem):
+            return
+        acc = item.acc
+        active_id = self._am.get_active_id()
+        if acc.id == active_id:
+            self.notify("Cannot delete active account. Switch first.", severity="warning")
+            return
+        self._am.delete_account(acc.id)
+        self._accounts = self._am.load_accounts()
+        self.notify(f"Deleted: {acc.label}")
+        self._refresh()
+
+    # ── Prompt bar ─────────────────────────────────────────────────────────────
+
+    @on(Input.Submitted, "#prompt-input")
+    def on_prompt_submitted(self, event: Input.Submitted) -> None:
+        prompt = event.value.strip()
+        event.input.clear()
+        if prompt:
+            self._launch("new", prompt=prompt)
+
+    # ── Click handlers ─────────────────────────────────────────────────────────
 
     @on(ListView.Selected, "#sessions-list")
     def on_session_selected(self, event: ListView.Selected) -> None:
-        idx = event.list_view.index
-        conv = self._sessions[idx] if idx is not None and idx < len(self._sessions) else None
-        self._launch("resume", conv)
+        if isinstance(event.item, SessionItem):
+            self._launch("resume", event.item.conv)
 
     @on(ListView.Selected, "#accounts-list")
     def on_account_selected(self, event: ListView.Selected) -> None:
-        idx = event.list_view.index
-        if idx is not None and idx < len(self._accounts):
-            acc = self._accounts[idx]
+        if isinstance(event.item, AccountItem):
+            acc = event.item.acc
             self._am.switch_to(acc)
             self._refresh()
             self.notify(f"Active: [{CLI_ICON.get(acc.cli_type,'?')}] {acc.label}")
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     ClawsCummerTUI().run()

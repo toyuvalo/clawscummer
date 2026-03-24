@@ -600,6 +600,20 @@ class AccountManager:
         self._save_raw(data)
         return acc
 
+    def delete_account(self, account_id: str) -> bool:
+        """Remove account by id. Returns True if removed."""
+        data = self._load_raw()
+        accounts = data.get("accounts", [])
+        new_accounts = [a for a in accounts if a.get("id") != account_id]
+        if len(new_accounts) == len(accounts):
+            return False
+        data["accounts"] = new_accounts
+        # If deleted account was active, clear active_id
+        if data.get("active_id") == account_id:
+            data["active_id"] = new_accounts[0]["id"] if new_accounts else ""
+        self._save_raw(data)
+        return True
+
 
 # ── Conversation Scanner ──────────────────────────────────────────────────────
 class ConversationScanner:
@@ -748,6 +762,123 @@ class ConversationScanner:
         except Exception:
             return None
 
+    def _parse_codex(self, path: Path) -> Optional[Conversation]:
+        """Parse a Codex rollout-*.jsonl session file."""
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            # Extract UUID from filename: rollout-<datetime>-<uuid>.jsonl
+            parts = path.stem.split("-")
+            session_id = "-".join(parts[-5:]) if len(parts) >= 5 else path.stem
+            cwd = ""
+            topic = ""
+            last_ts = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+            last_type = None
+            msg_count = 0
+
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                rec_type = rec.get("type", "")
+                ts_str = rec.get("timestamp")
+                if ts_str:
+                    try:
+                        last_ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    except Exception:
+                        pass
+
+                if rec_type == "session_meta":
+                    payload = rec.get("payload", {})
+                    session_id = payload.get("id", session_id)
+                    cwd = payload.get("cwd", "")
+                elif rec_type == "event_msg":
+                    payload = rec.get("payload", {})
+                    msg_type = payload.get("type", "")
+                    if msg_type == "user_message":
+                        text = payload.get("message", "")
+                        if not topic and text:
+                            topic = str(text).strip()[:90]
+                        msg_count += 1
+                        last_type = "user"
+                    elif msg_type in ("task_complete", "agent_message"):
+                        last_type = "assistant"
+                        msg_count += 1
+
+            if not topic or msg_count < 2:
+                return None
+
+            return Conversation(
+                session_id=session_id,
+                project_key=cwd,
+                project_path=cwd,
+                topic=topic,
+                last_message="",
+                message_count=msg_count,
+                last_timestamp=last_ts,
+                is_wip=(last_type == "user"),
+                jsonl_path=path,
+                cli_type="codex",
+            )
+        except Exception:
+            return None
+
+    def _parse_gemini_logs(self, path: Path) -> list[Conversation]:
+        """Parse a Gemini logs.json file (JSON array of messages across sessions)."""
+        convs = []
+        try:
+            entries = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+            if not isinstance(entries, list):
+                return []
+
+            # Group by sessionId
+            sessions: dict[str, list[dict]] = {}
+            for entry in entries:
+                sid = entry.get("sessionId", "")
+                if sid:
+                    sessions.setdefault(sid, []).append(entry)
+
+            project_key = path.parent.name
+            project_path = self.decode_path(project_key)
+
+            for sid, msgs in sessions.items():
+                user_msgs = [m for m in msgs if m.get("type") == "user"]
+                if len(user_msgs) < 1:
+                    continue
+                topic = str(user_msgs[0].get("message", "")).strip()[:90]
+                if not topic:
+                    continue
+
+                # Get last timestamp
+                last_ts = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+                for m in reversed(msgs):
+                    ts = m.get("timestamp")
+                    if ts:
+                        try:
+                            last_ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                            break
+                        except Exception:
+                            pass
+
+                last_type = msgs[-1].get("type", "") if msgs else ""
+                convs.append(Conversation(
+                    session_id=sid,
+                    project_key=f"gemini:{project_key}",
+                    project_path=project_path,
+                    topic=topic,
+                    last_message="",
+                    message_count=len(msgs),
+                    last_timestamp=last_ts,
+                    is_wip=(last_type == "user"),
+                    jsonl_path=path,
+                    cli_type="gemini",
+                ))
+        except Exception:
+            pass
+        return convs
+
     def scan_all(self) -> list[Conversation]:
         convs = []
         # Claude sessions
@@ -759,17 +890,20 @@ class ConversationScanner:
                     c = self._parse_claude(f)
                     if c:
                         convs.append(c)
-        # Gemini sessions
+        # Gemini sessions (logs.json per project)
         gemini_tmp = GEMINI_DIR / "tmp"
         if gemini_tmp.exists():
             for proj_dir in gemini_tmp.iterdir():
-                chats_dir = proj_dir / "chats"
-                if not chats_dir.exists():
-                    continue
-                for f in chats_dir.glob("session_*.json"):
-                    c = self._parse_gemini(f)
-                    if c:
-                        convs.append(c)
+                logs = proj_dir / "logs.json"
+                if logs.exists():
+                    convs.extend(self._parse_gemini_logs(logs))
+        # Codex sessions
+        codex_sessions = Path.home() / ".codex" / "sessions"
+        if codex_sessions.exists():
+            for f in codex_sessions.rglob("*.jsonl"):
+                c = self._parse_codex(f)
+                if c:
+                    convs.append(c)
         convs.sort(key=lambda c: c.last_timestamp, reverse=True)
         return convs
 

@@ -382,8 +382,10 @@ class Api:
                 text = self._read_response_for_prompt(prompt_text)
             elif cli_type == "gemini":
                 text = self._read_gemini_response_for_prompt(prompt_text)
+            elif cli_type == "codex":
+                text = self._read_codex_response_for_prompt(prompt_text)
             else:
-                text = None  # codex: TODO SQLite reader
+                text = None
 
             if text:
                 return json.dumps({"ok": True, "text": text})
@@ -491,8 +493,55 @@ class Api:
                         return content
         return None
 
+    def _read_codex_response_for_prompt(self, prompt_text: str) -> Optional[str]:
+        """Find the Codex response that follows a specific user prompt."""
+        from pathlib import Path
+        codex_sessions = Path.home() / ".codex" / "sessions"
+        if not codex_sessions.exists():
+            return None
+
+        # Find all session JSONL files (nested by date: 2026/03/20/rollout-*.jsonl)
+        session_files = list(codex_sessions.rglob("rollout-*.jsonl"))
+        if not session_files:
+            return None
+
+        # Prefer files from the current session
+        recent = [f for f in session_files if f.stat().st_mtime >= self._session_start_time - 5]
+        newest = max(recent or session_files, key=lambda f: f.stat().st_mtime)
+
+        try:
+            messages = []
+            for line in newest.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    rec_type = rec.get("type", "")
+                    if rec_type == "event_msg":
+                        payload = rec.get("payload", {})
+                        msg_type = payload.get("type", "")
+                        content = payload.get("message", "")
+                        if msg_type == "user_message" and content:
+                            messages.append({"role": "user", "text": str(content).strip()})
+                        elif msg_type in ("task_complete", "agent_message") and content:
+                            messages.append({"role": "assistant", "text": str(content).strip()})
+                except Exception:
+                    continue
+        except Exception:
+            return None
+
+        # Find the response that follows our specific prompt (substring match)
+        prompt_clean = prompt_text.strip()[:40].lower()
+        for i in range(len(messages) - 1, 0, -1):
+            if messages[i]["role"] == "assistant" and messages[i - 1]["role"] == "user":
+                if not prompt_clean or prompt_clean in messages[i - 1]["text"].lower():
+                    return messages[i]["text"]
+
+        return None
+
     def get_last_response(self) -> str:
-        """Read the last assistant message from Claude's conversation file.
+        """Read the last assistant message from the conversation file.
         Called from JS when a turn completes — gives clean text without Ink rendering artifacts.
         Scoped to the current working directory's project folder."""
         try:
@@ -501,6 +550,8 @@ class Api:
                 text = self._read_last_claude_response()
             elif cli_type == "gemini":
                 text = self._read_gemini_response_for_prompt("")  # empty = last response
+            elif cli_type == "codex":
+                text = self._read_codex_response_for_prompt("")  # empty = last response
             else:
                 text = None
 
