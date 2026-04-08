@@ -88,6 +88,20 @@ bash build.sh        # Linux / macOS → dist/clawscummer
 
 Binaries are built automatically via GitHub Actions on every version tag.
 
+## Project Structure
+
+```
+clawscummer.py          Core app — account pool, rotation, context handoff
+tui.py                  Terminal UI (Textual-based, Linux/macOS)
+switch.py               Account switcher helper
+gui/                    Windows GUI (pywebview + xterm.js)
+ha_integration/         Home Assistant sensors and automations
+clawscummer.ps1/.cmd/.sh  Platform launchers
+install.ps1 / install.sh  Install scripts
+build.ps1 / build.sh      PyInstaller packaging
+.github/workflows/        CI — auto-builds on version tags
+```
+
 ## Related
 
 - [webdev.dvlce.ca/clawscummer](https://webdev.dvlce.ca/clawscummer) — project page
