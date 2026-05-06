@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 100
+exclude = [
+    ".venv",
+    "node_modules",
+    "_archive",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.bandit]
+exclude_dirs = [".venv", "node_modules", "_archive"]
+skips = ["B101", "B311"]
